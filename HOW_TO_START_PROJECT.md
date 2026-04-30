@@ -1,468 +1,367 @@
-# Hướng Dẫn Khởi Động Dự Án - Roadside Assistance System
+# Hướng Dẫn Khởi Động Dự Án - Roadside Rescue System
 
 ## Tổng quan
-Hệ thống Hỗ Trợ Sự Cố Xe Trên Đường được phát triển bằng **NiceGUI** (frontend) và **FastAPI** (backend), sử dụng **PostgreSQL** làm cơ sở dữ liệu.
+
+Dự án sử dụng:
+- **Frontend**: NiceGUI (Python web framework)
+- **Backend**: FastAPI (REST API)
+- **Database**: PostgreSQL
+- **File Storage**: Local filesystem cho images
 
 ---
 
-## Yêu Cầu Hệ Thống
+## Bước 1: Cài Đặt PostgreSQL
 
-### Phần mềm cần cài đặt
-- **Python**: Phiên bản 3.8 trở lên
-- **PostgreSQL**: Phiên bản 12 trở lên
-- **pip**: Trình quản lý gói Python
-
-### Thư viện Python
-Tất cả thư viện được liệt kê trong file `backend/requirements.txt`
-
----
-
-## Các Bước Cài Đặt Chi Tiết
-
-### Bước 1: Cài Đặt PostgreSQL
-
-#### Trên Ubuntu/Debian:
+### Trên Ubuntu/Debian:
 ```bash
+# Cài đặt PostgreSQL
 sudo apt update
-sudo apt install postgresql postgresql-contrib
+sudo apt install postgresql postgresql-contrib -y
+
+# Khởi động PostgreSQL service
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# Kiểm tra status
+sudo systemctl status postgresql
 ```
 
-#### Trên Windows:
-1. Tải PostgreSQL từ https://www.postgresql.org/download/windows/
-2. Chạy file cài đặt và làm theo hướng dẫn
-3. Ghi nhớ mật khẩu tài khoản `postgres`
+### Trên Windows:
+1. Tải PostgreSQL từ: https://www.postgresql.org/download/windows/
+2. Chạy installer và làm theo hướng dẫn
+3. Ghi nhớ password cho user `postgres`
 
-#### Trên macOS:
+### Trên macOS:
 ```bash
+# Sử dụng Homebrew
 brew install postgresql
+brew services start postgresql
 ```
 
-### Bước 2: Tạo Cơ Sở Dữ Liệu
+---
 
+## Bước 2: Tạo Database và Cấu Hình
+
+### Cách 1: Sử dụng script tự động (khuyến nghị)
+```bash
+cd /workspace/scripts
+
+# Chạy script SQL để tạo database và tables
+sudo -u postgres psql -f init_postgres.sql
+```
+
+### Cách 2: Thủ công
 ```bash
 # Đăng nhập vào PostgreSQL
 sudo -u postgres psql
 
-# Hoặc trên Windows:
-# psql -U postgres
-```
-
-```sql
--- Tạo database mới
+# Trong PostgreSQL prompt:
 CREATE DATABASE rescue_system;
+\c rescue_system
 
--- Tạo user (nếu cần)
-CREATE USER rescue_admin WITH PASSWORD 'your_secure_password';
-GRANT ALL PRIVILEGES ON DATABASE rescue_system TO rescue_admin;
+# Chạy các lệnh CREATE TABLE từ scripts/init_postgres.sql
+# (copy và paste nội dung file SQL)
 
--- Thoát
+# Thoát
 \q
 ```
 
-### Bước 3: Cấu Hình Database Connection
+### Xác nhận database đã tạo:
+```bash
+sudo -u postgres psql -lqt | grep rescue_system
+```
 
-Mở file `/workspace/backend/app/database.py` và cập nhật thông tin kết nối:
+---
+
+## Bước 3: Cài Đặt Dependencies
+
+```bash
+cd /workspace
+
+# Cài đặt backend dependencies
+pip install -r backend/requirements.txt
+
+# Nếu frontend có requirements.txt riêng
+# pip install -r frontend/requirements.txt
+```
+
+**Các packages chính:**
+- FastAPI, Uvicorn (backend)
+- SQLAlchemy, psycopg2-binary (database)
+- Passlib, PyJWT (authentication)
+- NiceGUI (frontend)
+- Python-multipart (file uploads)
+
+---
+
+## Bước 4: Cấu Hình Kết Nối Database
+
+Chỉnh sửa file `/workspace/backend/app/database.py`:
 
 ```python
-DATABASE_URL = "postgresql://postgres:your_password@localhost:5432/rescue_system"
+DATABASE_URL = "postgresql://postgres:YOUR_PASSWORD@localhost:5432/rescue_system"
 ```
 
-**Lưu ý**: Thay đổi:
-- `postgres`: username của bạn
-- `your_password`: mật khẩu của bạn
-- `localhost`: host (nếu DB ở máy khác)
-- `5432`: port (mặc định là 5432)
-- `rescue_system`: tên database
+Thay `YOUR_PASSWORD` bằng password của user postgres.
 
-### Bước 4: Cài Đặt Dependencies
+---
+
+## Bước 5: Khởi Động Backend Server
 
 ```bash
-# Di chuyển vào thư mục backend
 cd /workspace/backend
 
-# Cài đặt các thư viện cần thiết
-pip install -r requirements.txt
+# Chạy backend với auto-reload
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### Bước 5: Khởi Tạo Database
-
-```bash
-# Từ thư mục backend
-cd /workspace/backend
-
-# Chạy script khởi tạo database
-python -m app.database
-```
-
-Hoặc chạy trực tiếp:
-```bash
-python backend/app/database.py
-```
-
-Nếu thành công, bạn sẽ thấy thông báo:
-```
-Database tables created successfully!
-```
-
-### Bước 6: Khởi Động Backend Server
-
-```bash
-# Từ thư mục backend
-cd /workspace/backend
-
-# Chạy server
-python run.py
-```
-
-Hoặc sử dụng uvicorn trực tiếp:
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-**Kiểm tra backend hoạt động**:
-- Mở trình duyệt truy cập: http://localhost:8000
-- API Documentation: http://localhost:8000/docs
+**Kiểm tra backend:**
+- Mở browser truy cập: http://localhost:8000
+- API Docs: http://localhost:8000/docs
 - Health check: http://localhost:8000/health
 
-Bạn sẽ thấy thông báo chào mừng và có thể test API qua Swagger UI.
+---
 
-### Bước 7: Cấu Hình Frontend
+## Bước 6: Khởi Động Frontend Server
 
-Mở file `/workspace/frontend/core/config.py` để kiểm tra cấu hình:
-
-```python
-# Đảm bảo BACKEND_URL trỏ đúng đến backend server
-BACKEND_URL = "http://localhost:8000/api/v1"
-```
-
-### Bước 8: Cài Đặt NiceGUI cho Frontend
+Mở terminal mới:
 
 ```bash
-# Từ thư mục workspace
-cd /workspace
+cd /workspace/frontend
 
-# Cài đặt NiceGUI nếu chưa có
-pip install nicegui
-```
-
-### Bước 9: Tạo File Chạy Frontend (main.py)
-
-Tạo file `/workspace/frontend/main.py`:
-
-```python
-"""
-Frontend main entry point for NiceGUI application.
-"""
-from nicegui import ui, app
-from typing import Callable
-
-from .core.config import APP_TITLE, APP_VERSION
-from .core.auth import is_authenticated, get_user_role, get_redirect_url_for_role, LOGIN_PAGE
-from .components.navbar import create_navbar
-
-# Import pages (sẽ được tạo sau)
-# from .pages.auth import login_page, register_page
-# from .pages.customer import dashboard as customer_dashboard
-# from .pages.company import dashboard as company_dashboard
-# from .pages.admin import dashboard as admin_dashboard
-
-
-def render_header():
-    """Render navigation header."""
-    create_navbar(APP_TITLE)
-
-
-@ui.page('/')
-def index():
-    """Root page - redirect based on authentication."""
-    if is_authenticated():
-        role = get_user_role()
-        redirect_url = get_redirect_url_for_role(role)
-        ui.navigate.to(redirect_url)
-    else:
-        ui.navigate.to(LOGIN_PAGE)
-
-
-@ui.page('/login')
-def login_page():
-    """Login page."""
-    render_header()
-    # Implement login form here
-    ui.label('Login Page').classes('text-2xl m-4')
-    # TODO: Add login form implementation
-
-
-@ui.page('/register')
-def register_page():
-    """Registration page."""
-    render_header()
-    ui.label('Register Page').classes('text-2xl m-4')
-    # TODO: Add registration form implementation
-
-
-# Customer Dashboard
-@ui.page('/customer/dashboard')
-def customer_dashboard():
-    """Customer dashboard page."""
-    render_header()
-    ui.label('Customer Dashboard').classes('text-2xl m-4')
-    # TODO: Implement customer dashboard
-
-
-# Company Dashboard
-@ui.page('/company/dashboard')
-def company_dashboard():
-    """Company dashboard page."""
-    render_header()
-    ui.label('Company Dashboard').classes('text-2xl m-4')
-    # TODO: Implement company dashboard
-
-
-# Admin Dashboard
-@ui.page('/admin/dashboard')
-def admin_dashboard():
-    """Admin dashboard page."""
-    render_header()
-    ui.label('Admin Dashboard').classes('text-2xl m-4')
-    # TODO: Implement admin dashboard
-
-
-# Run application
-if __name__ in {"__main__", "__mp_main__"}:
-    print(f"Starting {APP_TITLE} v{APP_VERSION}")
-    print("Frontend URL: http://localhost:8080")
-    print("Backend URL: http://localhost:8000")
-    
-    # Configure storage
-    app.storage.browser['id'] = 'roadside_assistance'
-    
-    # Run NiceGUI server
-    ui.run(
-        title=APP_TITLE,
-        host='0.0.0.0',
-        port=8080,
-        reload=True,
-        storage_secret='your-secret-key-change-in-production'
-    )
-```
-
-### Bước 10: Khởi Động Frontend Server
-
-```bash
-# Từ thư mục workspace
-cd /workspace
-
-# Chạy frontend
-python -m frontend.main
+# Chạy frontend NiceGUI
+python -m nicegui.run --host 0.0.0.0 --port 8080
 ```
 
 Hoặc:
 ```bash
-python frontend/main.py
+python frontend/run.py
 ```
 
-**Kiểm tra frontend hoạt động**:
-- Mở trình duyệt truy cập: http://localhost:8080
+**Kiểm tra frontend:**
+- Truy cập: http://localhost:8080
 
 ---
 
-## Quy Trình Khởi Động Hàng Ngày
+## Bước 7: Tạo Tài Khoản Admin Đầu Tiên
 
-### Khi Phát Triển (Development)
+Tài khoản admin đã được tạo tự động khi chạy script init_postgres.sql:
 
-Mở 2 terminal riêng biệt:
+**Thông tin đăng nhập:**
+- Username: `admin`
+- Password: `admin123`
+- Role: admin
 
-**Terminal 1 - Backend:**
+**Tài khoản customer mẫu:**
+- Username: `customer`
+- Password: `customer123`
+- Role: customer
+
+Để tạo thêm user, sử dụng API endpoint hoặc NiceGUI registration page.
+
+---
+
+## Bước 8: Upload Images
+
+Thư mục lưu trữ images: `/workspace/backend/app/uploads/images/`
+
+Các API endpoints cho upload:
+- `POST /api/v1/profile/me/avatar` - Upload avatar user
+- `POST /api/v1/profile/chat/{request_id}/image` - Upload image trong chat
+
+Images sẽ được truy cập qua: `http://localhost:8000/uploads/images/{filename}`
+
+---
+
+## Chạy Tất Cả Cùng Lúc (Script Tự Động)
+
 ```bash
+cd /workspace/scripts
+
+# Chạy script setup với menu tương tác
+./setup_project.sh
+```
+
+Hoặc chạy nền:
+```bash
+# Backend
 cd /workspace/backend
-python run.py
+nohup python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
+
+# Frontend
+cd /workspace/frontend
+nohup python -m nicegui.run --host 0.0.0.0 --port 8080 > frontend.log 2>&1 &
 ```
 
-**Terminal 2 - Frontend:**
+---
+
+## Xử Lý Sự Cố
+
+### Lỗi kết nối database:
 ```bash
-cd /workspace
-python frontend/main.py
+# Kiểm tra PostgreSQL đang chạy
+sudo systemctl status postgresql
+
+# Restart PostgreSQL
+sudo systemctl restart postgresql
+
+# Kiểm tra credentials trong database.py
 ```
 
-### Khi Sản Xuất (Production)
+### Lỗi port đã sử dụng:
+```bash
+# Kiểm tra port đang dùng
+lsof -i :8000
+lsof -i :8080
 
-Sử dụng process manager như `supervisor` hoặc `systemd`:
+# Kill process
+kill -9 <PID>
+```
 
-**Ví dụ với supervisor:**
+### Lỗi dependencies:
+```bash
+# Upgrade pip
+pip install --upgrade pip
 
-Tạo file `/etc/supervisor/conf.d/rescue-backend.conf`:
+# Reinstall dependencies
+pip install -r backend/requirements.txt --force-reinstall
+```
+
+### Lỗi permissions thư mục uploads:
+```bash
+mkdir -p /workspace/backend/app/uploads/images
+chmod 755 /workspace/backend/app/uploads
+chmod 755 /workspace/backend/app/uploads/images
+```
+
+---
+
+## Deploy Production
+
+### Sử dụng Supervisor (Ubuntu/Debian):
+
+1. Cài supervisor:
+```bash
+sudo apt install supervisor -y
+```
+
+2. Tạo config file backend `/etc/supervisor/conf.d/rescue_backend.conf`:
 ```ini
-[program:rescue-backend]
-command=/usr/bin/python3 run.py
+[program:rescue_backend]
+command=/usr/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 directory=/workspace/backend
+user=root
 autostart=true
 autorestart=true
-stderr_logfile=/var/log/rescue-backend.err.log
-stdout_logfile=/var/log/rescue-backend.out.log
-user=root
-environment=PYTHONUNBUFFERED=1
+redirect_stderr=true
+stdout_logfile=/var/log/rescue/backend.log
 ```
 
-Tạo file `/etc/supervisor/conf.d/rescue-frontend.conf`:
+3. Tạo config file frontend `/etc/supervisor/conf.d/rescue_frontend.conf`:
 ```ini
-[program:rescue-frontend]
-command=/usr/bin/python3 -m frontend.main
-directory=/workspace
+[program:rescue_frontend]
+command=/usr/bin/python3 -m nicegui.run --host 0.0.0.0 --port 8080
+directory=/workspace/frontend
+user=root
 autostart=true
 autorestart=true
-stderr_logfile=/var/log/rescue-frontend.err.log
-stdout_logfile=/var/log/rescue-frontend.out.log
-user=root
-environment=PYTHONUNBUFFERED=1
+redirect_stderr=true
+stdout_logfile=/var/log/rescue/frontend.log
 ```
 
-Khởi động services:
+4. Khởi động:
 ```bash
 sudo supervisorctl reread
 sudo supervisorctl update
-sudo supervisorctl start rescue-backend
-sudo supervisorctl start rescue-frontend
+sudo supervisorctl start rescue_backend
+sudo supervisorctl start rescue_frontend
+sudo supervisorctl status
+```
+
+### Sử dụng Nginx làm Reverse Proxy:
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /api/ {
+        proxy_pass http://localhost:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /uploads/ {
+        proxy_pass http://localhost:8000/uploads/;
+    }
+}
 ```
 
 ---
 
-## Tạo Tài Khoản Admin Đầu Tiên
+## API Endpoints Chính
 
-Sau khi khởi động hệ thống, tạo tài khoản admin qua API:
+### Authentication:
+- `POST /api/v1/auth/register` - Đăng ký user mới
+- `POST /api/v1/auth/login` - Đăng nhập
+- `GET /api/v1/auth/me` - Lấy thông tin user hiện tại
 
-```bash
-curl -X POST http://localhost:8000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "admin",
-    "password": "Admin@123",
-    "full_name": "System Administrator",
-    "phone": "0901234567",
-    "email": "admin@rescue.com"
-  }'
-```
+### Profile:
+- `GET /api/v1/profile/me` - Lấy profile user
+- `PUT /api/v1/profile/me` - Cập nhật profile
+- `POST /api/v1/profile/me/avatar` - Upload avatar
+- `PUT /api/v1/profile/company` - Cập nhật company profile (company staff only)
+- `POST /api/v1/profile/chat/{request_id}/image` - Upload chat image
 
-**Lưu ý**: Sau khi tạo, cần cập nhật role thành `admin` trong database:
-
-```bash
-psql -U postgres -d rescue_system
-```
-
-```sql
-UPDATE users SET role = 'admin' WHERE username = 'admin';
-```
+### Rescue Services:
+- `GET /api/v1/rescue/companies/nearby` - Tìm công ty gần đó
+- `POST /api/v1/rescue/requests` - Tạo rescue request
+- `GET /api/v1/rescue/requests` - Xem danh sách requests
+- `GET /api/v1/rescue/requests/{id}` - Xem chi tiết request
+- `PUT /api/v1/rescue/requests/{id}/status` - Cập nhật status
+- `POST /api/v1/rescue/requests/{id}/cancel` - Hủy request
 
 ---
 
-## Xử Lý Sự Cố Thường Gặp
+## Thông Tin Quan Trọng
 
-### Lỗi Kết Nối Database
+| Service | URL | Port |
+|---------|-----|------|
+| Frontend (NiceGUI) | http://localhost:8080 | 8080 |
+| Backend API | http://localhost:8000 | 8000 |
+| API Documentation | http://localhost:8000/docs | 8000 |
+| PostgreSQL | localhost:5432 | 5432 |
 
-**Triệu chứng**: `could not connect to server`
+**Default Credentials:**
+- Admin: `admin` / `admin123`
+- Customer: `customer` / `customer123`
 
-**Giải pháp**:
-1. Kiểm tra PostgreSQL đang chạy:
-   ```bash
-   sudo systemctl status postgresql
-   ```
-2. Khởi động nếu chưa chạy:
-   ```bash
-   sudo systemctl start postgresql
-   ```
-3. Kiểm tra thông tin kết nối trong `database.py`
-
-### Lỗi Port Đã Sử Dụng
-
-**Triệu chứng**: `Address already in use`
-
-**Giải pháp**:
-1. Tìm process đang dùng port:
-   ```bash
-   lsof -i :8000  # Backend
-   lsof -i :8080  # Frontend
-   ```
-2. Kill process:
-   ```bash
-   kill -9 <PID>
-   ```
-3. Hoặc thay đổi port trong cấu hình
-
-### Lỗi Thiếu Thư Viện
-
-**Triệu chứng**: `ModuleNotFoundError`
-
-**Giải pháp**:
-```bash
-pip install -r backend/requirements.txt
-pip install nicegui
-```
-
-### Lỗi CORS
-
-**Triệu chứng**: Frontend không gọi được API
-
-**Giải pháp**:
-- Kiểm tra CORS configuration trong `backend/app/main.py`
-- Đảm bảo `allow_origins` chứa URL frontend
+**Upload Directory:** `/workspace/backend/app/uploads/images/`
 
 ---
 
-## Kiểm Tra Hệ Thống Hoạt Động
+## Kiểm Tra Nhanh
 
-### Backend Health Check
 ```bash
+# 1. Kiểm tra PostgreSQL
+sudo -u postgres psql -c "\l" | grep rescue_system
+
+# 2. Kiểm tra backend
 curl http://localhost:8000/health
+
+# 3. Kiểm tra frontend
+curl http://localhost:8080
+
+# 4. Test login API
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
 ```
 
-Kết quả mong đợi:
-```json
-{"status": "healthy"}
-```
-
-### API Documentation
-Truy cập: http://localhost:8000/docs
-
-### Frontend
-Truy cập: http://localhost:8080
-
----
-
-## Sao Lưu và Phục Hồi Database
-
-### Sao Lưu
-```bash
-pg_dump -U postgres rescue_system > backup_$(date +%Y%m%d).sql
-```
-
-### Phục Hồi
-```bash
-psql -U postgres rescue_system < backup_20240101.sql
-```
-
----
-
-## Cập Nhật Hệ Thống
-
-Khi có code mới:
-
-1. Dừng servers
-2. Pull code mới (nếu dùng Git)
-3. Cập nhật dependencies:
-   ```bash
-   pip install -r backend/requirements.txt --upgrade
-   ```
-4. Chạy migrations (nếu có)
-5. Khởi động lại servers
-
----
-
-## Liên Hệ Hỗ Trợ
-
-Nếu gặp vấn đề, kiểm tra:
-- Log files trong thư mục `logs/`
-- Console output khi khởi động
-- PostgreSQL logs: `/var/log/postgresql/`
-
----
-
-**Chúc bạn thành công!** 🚗🔧
+Nếu tất cả đều OK, bạn đã setup thành công! 🎉

@@ -18,6 +18,34 @@ from ..schemas.rescue import RescueRequestCreate, ServiceCreate, VehicleCreate
 EARTH_RADIUS_KM = 6371.0
 
 
+def get_company_by_id(db: Session, company_id: int) -> Optional[RescueCompany]:
+    """
+    Get a rescue company by ID.
+    
+    Args:
+        db: Database session
+        company_id: Company ID
+    
+    Returns:
+        RescueCompany object if found, None otherwise
+    """
+    return db.query(RescueCompany).filter(RescueCompany.id == company_id).first()
+
+
+def get_company_by_owner_id(db: Session, owner_id: int) -> Optional[RescueCompany]:
+    """
+    Get a rescue company by owner ID.
+    
+    Args:
+        db: Database session
+        owner_id: Owner user ID
+    
+    Returns:
+        RescueCompany object if found, None otherwise
+    """
+    return db.query(RescueCompany).filter(RescueCompany.owner_id == owner_id).first()
+
+
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
     Calculate the great-circle distance between two points on Earth using Haversine formula.
