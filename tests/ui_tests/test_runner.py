@@ -125,7 +125,6 @@ def test_runner_page():
     summary_label = ui.label("").classes('text-xl font-bold mt-4')
     
     async def run_tests():
-        nonlocal test_runner
         base_url = base_url_input.value.rstrip('/')
         
         # Reset state
