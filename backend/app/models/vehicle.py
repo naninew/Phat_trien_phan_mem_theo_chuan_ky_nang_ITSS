@@ -4,11 +4,12 @@ RescueVehicle model for managing rescue vehicles.
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
+import enum
 
 from ..database import Base
 
 
-class VehicleStatus(str):
+class VehicleStatus(str, enum.Enum):
     """Vehicle status enumeration."""
     AVAILABLE = "available"
     ON_MISSION = "on_mission"

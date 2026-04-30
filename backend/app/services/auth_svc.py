@@ -8,7 +8,7 @@ from typing import Optional, Tuple
 
 from ..models.user import User, UserRole
 from ..schemas.auth import UserRegister
-from ..utils.jwt_helper import create_access_token, create_refresh_token
+from ..utils.jwt_helper import create_access_token, create_refresh_token, get_current_user_from_token
 
 
 # Password hashing context
