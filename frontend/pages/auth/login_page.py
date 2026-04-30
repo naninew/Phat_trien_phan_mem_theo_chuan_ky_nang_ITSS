@@ -2,10 +2,10 @@
 Login page for NiceGUI frontend.
 """
 from nicegui import ui
-from ..services.auth_api import login
-from ..core.auth import login_user, get_redirect_url_for_role, is_authenticated, LOGIN_PAGE
-from ..core.config import CUSTOMER_DASHBOARD
-from ..components.navbar import create_navbar
+from frontend.services.auth_api import login
+from frontend.core.auth import login_user, get_redirect_url_for_role, is_authenticated, LOGIN_PAGE
+from frontend.core.config import CUSTOMER_DASHBOARD
+from frontend.components.navbar import create_navbar
 
 
 def create_login_page():

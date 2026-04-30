@@ -3,9 +3,9 @@ Find rescue page for customers to request help.
 """
 from nicegui import ui
 from typing import Optional, Dict, Any, List
-from ..core.auth import require_auth, get_current_user, get_access_token
-from ..components.navbar import create_navbar
-from ..services.rescue_api import find_nearby_companies, create_rescue_request
+from frontend.core.auth import require_auth, get_current_user, get_access_token
+from frontend.components.navbar import create_navbar
+from frontend.services.rescue_api import find_nearby_companies, create_rescue_request
 
 
 def create_find_rescue_page():

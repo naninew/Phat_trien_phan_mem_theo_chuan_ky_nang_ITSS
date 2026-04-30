@@ -3,9 +3,9 @@ Customer requests page to view and track rescue requests.
 """
 from nicegui import ui
 from typing import Optional, Dict, Any, List
-from ..core.auth import require_auth, get_current_user, get_access_token, CUSTOMER_DASHBOARD
-from ..components.navbar import create_navbar
-from ..services.rescue_api import get_my_requests, get_request_details, cancel_request
+from frontend.core.auth import require_auth, get_current_user, get_access_token, CUSTOMER_DASHBOARD
+from frontend.components.navbar import create_navbar
+from frontend.services.rescue_api import get_my_requests, get_request_details, cancel_request
 
 
 def create_requests_page():

@@ -3,7 +3,7 @@ Base API client for HTTP requests to backend.
 """
 import httpx
 from typing import Optional, Dict, Any, List
-from ..core.config import BACKEND_URL
+from frontend.core.config import BACKEND_URL
 
 
 class APIClient:

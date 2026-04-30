@@ -3,8 +3,8 @@ Company fleet management page for NiceGUI frontend.
 """
 from nicegui import ui
 from typing import Optional, Dict, Any, List
-from ..core.auth import require_auth, get_current_user, get_access_token, get_user_role
-from ..components.navbar import create_navbar
+from frontend.core.auth import require_auth, get_current_user, get_access_token, get_user_role
+from frontend.components.navbar import create_navbar
 
 
 def create_fleet_page():
