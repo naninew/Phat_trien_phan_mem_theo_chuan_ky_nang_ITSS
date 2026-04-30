@@ -1,0 +1,3 @@
+"""
+Frontend core package initialization.
+"""
