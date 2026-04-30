@@ -29,6 +29,7 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False, index=True)
     role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.CUSTOMER)
     is_active = Column(Boolean, default=True)
+    avatar_url = Column(String(500), nullable=True)  # Profile picture URL
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

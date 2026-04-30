@@ -84,7 +84,7 @@ def find_nearby_companies(
 def create_rescue_request(
     request_data: RescueRequestCreate,
     db: Session = Depends(get_db),
-    current_user: Any = Depends(lambda: None),  # TODO: Add JWT dependency
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
 ) -> dict:
     """
     Create a new rescue request.
@@ -96,9 +96,11 @@ def create_rescue_request(
     - **car_issue_detail**: Detailed description of the vehicle issue
     - **images**: Optional list of image URLs
     - **payment_method**: Preferred payment method (default: cash)
+    
+    Requires valid JWT token in Authorization header.
     """
-    # Placeholder user_id - will get from JWT token
-    user_id = 1
+    # Get user_id from JWT token
+    user_id = current_user["user_id"]
     
     request = rescue_svc.create_rescue_request(
         db=db, user_id=user_id, request_data=request_data
@@ -117,13 +119,15 @@ def create_rescue_request(
 @router.get("/requests", response_model=dict)
 def get_my_requests(
     db: Session = Depends(get_db),
-    current_user: Any = Depends(lambda: None),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
 ) -> dict:
     """
     Get all rescue requests for the current user.
+    
+    Requires valid JWT token in Authorization header.
     """
-    # Placeholder user_id - will get from JWT token
-    user_id = 1
+    # Get user_id from JWT token
+    user_id = current_user["user_id"]
     
     requests = rescue_svc.get_user_requests(db=db, user_id=user_id)
     

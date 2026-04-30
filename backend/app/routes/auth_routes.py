@@ -88,13 +88,14 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)) -> dict:
 @router.get("/me", response_model=dict)
 def get_current_user(
     db: Session = Depends(get_db),
-    current_user: Any = Depends(lambda: None)  # TODO: Add JWT dependency
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
 ) -> dict:
     """
     Get current authenticated user information.
+    
+    Requires valid JWT token in Authorization header.
     """
-    # This is a placeholder - will implement JWT dependency later
     return success_response(
-        data={"message": "User info endpoint - implement JWT auth"},
+        data=current_user,
         message="Success"
     )

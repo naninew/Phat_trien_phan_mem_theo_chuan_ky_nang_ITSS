@@ -4,11 +4,12 @@ RescueRequest model for managing rescue service requests.
 from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
+import enum
 
 from ..database import Base
 
 
-class RequestStatus(str):
+class RequestStatus(str, enum.Enum):
     """Rescue request status enumeration."""
     PENDING = "pending"  # Chờ tiếp nhận
     ACCEPTED = "accepted"  # Đã tiếp nhận

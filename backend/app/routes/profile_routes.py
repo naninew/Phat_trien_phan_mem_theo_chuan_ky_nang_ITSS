@@ -199,9 +199,10 @@ def upload_avatar(
     # Save file
     avatar_path = save_uploaded_file(file, user_id)
     
-    # Update user record (you'll need to add avatar_url column to User model)
-    # For now, we'll just return the path
-    # In production, update: user.avatar_url = avatar_path
+    # Update user record with avatar URL
+    user.avatar_url = avatar_path
+    db.commit()
+    db.refresh(user)
     
     return success_response(
         data={"avatar_url": avatar_path},
