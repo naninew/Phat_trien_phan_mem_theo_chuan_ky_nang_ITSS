@@ -3,8 +3,8 @@ Admin users management page for NiceGUI frontend.
 """
 from nicegui import ui
 from typing import Optional, Dict, Any, List
-from ..core.auth import require_auth, get_current_user, get_access_token, ADMIN_DASHBOARD
-from ..components.navbar import create_navbar
+from frontend.core.auth import require_auth, get_current_user, get_access_token, ADMIN_DASHBOARD
+from frontend.components.navbar import create_navbar
 
 
 def create_users_page():

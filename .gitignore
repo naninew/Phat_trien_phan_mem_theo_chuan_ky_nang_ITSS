@@ -1,45 +1,102 @@
-```
+```gitignore
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
+*.pyc
+*.pyo
+*.pyd
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+env/
 venv/
-.env
 .venv/
-
-# Logs
+.ENV
+.ENV.*
+.venv/
+.venv.*
+.env
+.env.*
+.env.local
+.env.local.*
+.python-version
+.python_history
+*.pot
+*.pyc
+*.pyo
+*.pyd
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
 *.log
-*.log.*
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+
+# Frontend/Build
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+coverage/
+*.min.js
+*.min.css
+bundle.js
+bundle.css
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# OS
+*~
 .DS_Store
 Thumbs.db
 
+# System
+*.tmp
+*.temp
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Icon?
+desktop.ini
+
 # Environment
 .env
+.env.*
+!.env.example
 .env.local
-*.env.*
+.env.local.*
+.env.production
+.env.production.*
+.env.development
+.env.development.*
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 ```

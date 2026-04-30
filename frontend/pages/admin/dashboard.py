@@ -2,8 +2,8 @@
 Admin dashboard page for NiceGUI frontend.
 """
 from nicegui import ui
-from ..core.auth import require_auth, get_current_user, get_user_role, ADMIN_DASHBOARD
-from ..components.navbar import create_navbar
+from frontend.core.auth import require_auth, get_current_user, get_user_role, ADMIN_DASHBOARD
+from frontend.components.navbar import create_navbar
 
 
 def create_admin_dashboard():

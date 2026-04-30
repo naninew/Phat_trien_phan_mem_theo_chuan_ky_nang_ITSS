@@ -2,10 +2,10 @@
 Register page for NiceGUI frontend.
 """
 from nicegui import ui
-from ..services.auth_api import register
-from ..core.auth import login_user, get_redirect_url_for_role, is_authenticated
-from ..core.config import CUSTOMER_DASHBOARD, LOGIN_PAGE
-from ..components.navbar import create_navbar
+from frontend.services.auth_api import register
+from frontend.core.auth import login_user, get_redirect_url_for_role, is_authenticated
+from frontend.core.config import CUSTOMER_DASHBOARD, LOGIN_PAGE
+from frontend.components.navbar import create_navbar
 
 
 def create_register_page():
