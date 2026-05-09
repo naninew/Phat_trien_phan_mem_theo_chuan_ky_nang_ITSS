@@ -12,14 +12,20 @@ Usage:
 import asyncio
 import argparse
 import sys
+import os
 import json
 from datetime import datetime
 from typing import List, Dict, Any
 import httpx
-from rich.console import Console
-from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from pathlib import Path
 
+# Add project root to sys.path
+root_dir = Path(__file__).parent.parent.parent.absolute()
+if str(root_dir) not in sys.path:
+    sys.path.insert(0, str(root_dir))
+class Console:
+    def print(self, *args, **kwargs):
+        print(*args, **kwargs)
 
 console = Console()
 
@@ -42,7 +48,7 @@ class CommandLineUITestRunner:
             self.results.append({
                 "name": test_name,
                 "status": "PASSED",
-                "message": "✓",
+                "message": "PASSED",
                 "timestamp": datetime.now().isoformat()
             })
             self.passed += 1
@@ -51,7 +57,7 @@ class CommandLineUITestRunner:
             self.results.append({
                 "name": test_name,
                 "status": "FAILED",
-                "message": f"✗ {str(e)}",
+                "message": f"FAILED: {str(e)}",
                 "timestamp": datetime.now().isoformat()
             })
             self.failed += 1
@@ -110,31 +116,42 @@ class CommandLineUITestRunner:
     
     async def run_all_tests(self):
         """Run all UI tests with progress display."""
-        tests = [
-            ("Homepage Loads", self.test_homepage_loads),
-            ("Login Page Exists", self.test_login_page_exists),
-            ("Register Page Exists", self.test_register_page_exists),
-            ("Dashboard Requires Auth", self.test_dashboard_requires_auth),
-            ("API Health Check", self.test_api_health_endpoint),
-            ("Navbar Component", self.test_navbar_component),
-            ("Static Assets Load", self.test_static_assets_load),
-        ]
+        try:
+            from tests.ui_tests.test_all_features import ALL_UI_TESTS
+        except ImportError:
+            # Fallback if import fails
+            ALL_UI_TESTS = [
+                ("Homepage Loads", lambda url: self.test_homepage_loads()),
+                ("Login Page Exists", lambda url: self.test_login_page_exists()),
+                ("Register Page Exists", lambda url: self.test_register_page_exists()),
+                ("Dashboard Requires Auth", lambda url: self.test_dashboard_requires_auth()),
+                ("API Health Check", lambda url: self.test_api_health_endpoint()),
+                ("Navbar Component", lambda url: self.test_navbar_component()),
+                ("Static Assets Load", lambda url: self.test_static_assets_load()),
+            ]
         
-        console.print(f"\n[bold blue]Running UI Tests against {self.base_url}[/bold blue]\n")
+        console.print(f"\nRunning UI Tests against {self.base_url}\n")
         
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            console=console
-        ) as progress:
-            task = progress.add_task("Running tests...", total=len(tests))
-            
-            for test_name, test_func in tests:
-                progress.update(task, description=f"Testing: {test_name}")
-                await self.run_test(test_name, test_func)
-                progress.advance(task)
+        for test_name, test_func in ALL_UI_TESTS:
+            console.print(f"Testing: {test_name}...")
+            # Adapt for different function signatures if necessary
+            try:
+                import inspect
+                if inspect.iscoroutinefunction(test_func):
+                    if len(inspect.signature(test_func).parameters) > 0:
+                        await self.run_test(test_name, lambda f=test_func, u=self.base_url: f(u))
+                    else:
+                        await self.run_test(test_name, test_func)
+                else:
+                    await self.run_test(test_name, test_func)
+            except Exception as e:
+                self.results.append({
+                    "name": test_name,
+                    "status": "FAILED",
+                    "message": f"Setup error: {str(e)}",
+                    "timestamp": datetime.now().isoformat()
+                })
+                self.failed += 1
         
         return self.results
     
@@ -142,31 +159,22 @@ class CommandLineUITestRunner:
         """Print test results summary."""
         total = self.passed + self.failed + self.skipped
         
-        console.print("\n[bold]Test Results Summary[/bold]\n")
+        console.print("\nTest Results Summary\n")
         
-        table = Table(title="Test Results")
-        table.add_column("Status", style="cyan", no_wrap=True)
-        table.add_column("Test Name", style="magenta")
-        table.add_column("Details", style="green")
-        table.add_column("Time", style="blue")
+        print(f"{'Status':<15} | {'Test Name':<30} | {'Details':<30}")
+        print("-" * 80)
         
         for result in self.results:
-            status_style = "green" if result["status"] == "PASSED" else "red"
-            status_icon = "✓" if result["status"] == "PASSED" else "✗"
-            table.add_row(
-                f"[{status_style}]{status_icon} {result['status']}[/{status_style}]",
-                result["name"],
-                result["message"][:50] + "..." if len(result["message"]) > 50 else result["message"],
-                result["timestamp"].split("T")[1].split(".")[0]
-            )
-        
-        console.print(table)
+            status = result["status"]
+            name = result["name"]
+            message = result["message"][:50] + "..." if len(result["message"]) > 50 else result["message"]
+            print(f"{status:<15} | {name:<30} | {message:<30}")
         
         # Summary stats
-        console.print("\n[bold]Statistics:[/bold]")
+        console.print("\nStatistics:")
         console.print(f"  Total Tests: {total}")
-        console.print(f"  [green]Passed: {self.passed}[/green]")
-        console.print(f"  [red]Failed: {self.failed}[/red]")
+        console.print(f"  Passed: {self.passed}")
+        console.print(f"  Failed: {self.failed}")
         if self.skipped > 0:
             console.print(f"  [yellow]Skipped: {self.skipped}[/yellow]")
         
@@ -174,10 +182,10 @@ class CommandLineUITestRunner:
         console.print(f"\n  Success Rate: {success_rate:.1f}%")
         
         if self.failed == 0:
-            console.print("\n[bold green]✅ All tests passed![/bold green]")
+            console.print("\nAll tests passed!")
             return 0
         else:
-            console.print(f"\n[bold red]❌ {self.failed} test(s) failed[/bold red]")
+            console.print(f"\n{self.failed} test(s) failed")
             return 1
     
     def export_results(self, filename: str = None):

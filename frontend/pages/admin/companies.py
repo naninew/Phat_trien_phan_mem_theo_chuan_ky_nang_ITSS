@@ -1,141 +1,124 @@
 """
-Admin companies management page for NiceGUI frontend.
+Trang quản lý đơn vị cứu hộ – dành cho Quản trị viên (Admin).
 """
 from nicegui import ui
 from typing import Optional, Dict, Any, List
-from frontend.core.auth import require_auth, get_current_user, get_access_token, ADMIN_DASHBOARD
-from frontend.components.navbar import create_navbar
+
+from core.auth import require_role
+from components.page_layout import page_layout
+from services.admin_api import get_companies, update_company_status
 
 
 def create_companies_page():
-    """Create admin companies management page with NiceGUI components."""
-    
-    @ui.page('/admin/companies')
-    def companies_page():
-        # Require authentication and admin role
-        if not require_auth():
-            return
-        
-        user_role = get_user_role()
-        if user_role != 'admin':
-            ui.notify("Access denied - Admin only", color="negative")
-            ui.navigate.to(ADMIN_DASHBOARD)
-            return
-        
-        create_navbar("Company Management")
-        
-        with ui.column().classes('w-full p-8'):
-            with ui.row().classes('w-full items-center justify-between'):
-                ui.label('Rescue Companies').classes('text-2xl font-bold')
-                
-                # Status filter
-                status_filter = ui.select(
-                    options=['all', 'active', 'pending', 'suspended'],
-                    label='Filter by Status',
-                    value='all'
-                ).classes('w-full max-w-xs')
-            
-            # Refresh button
-            ui.button(icon='refresh', on_click=lambda: load_companies()).props('round dense flat')
-            
-            # Companies container
-            companies_container = ui.column().classes('w-full mt-4')
-            
-            # Status colors
-            status_colors = {
-                'active': 'green',
-                'pending': 'orange',
-                'suspended': 'red',
-            }
-            
-            async def load_companies():
-                """Load and display all rescue companies."""
-                token = get_access_token()
-                
-                with companies_container:
-                    companies_container.clear()
-                    
-                    # Mock data for demonstration
-                    mock_companies = [
-                        {
-                            'id': 1,
-                            'company_name': 'Fast Rescue Co.',
-                            'address': '123 Le Loi Street, District 1, HCMC',
-                            'hotline': '19001234',
-                            'license_number': 'GP-2024-001',
-                            'rating_avg': 4.5,
-                            'status': 'active',
-                            'contact_person': 'Mr. Tran Van E',
-                        },
-                        {
-                            'id': 2,
-                            'company_name': '24/7 Roadside Assistance',
-                            'address': '456 Nguyen Hue Boulevard, District 1, HCMC',
-                            'hotline': '19005678',
-                            'license_number': 'GP-2024-002',
-                            'rating_avg': 4.2,
-                            'status': 'pending',
-                            'contact_person': 'Ms. Le Thi F',
-                        },
-                    ]
-                    
-                    # Filter by status
-                    filter_val = status_filter.value
-                    if filter_val != 'all':
-                        mock_companies = [c for c in mock_companies if c.get('status') == filter_val]
-                    
-                    if not mock_companies:
-                        ui.label('No companies found').classes('text-gray-500 p-4')
-                        return
-                    
-                    for company in mock_companies:
-                        company_id = company.get('id')
-                        status = company.get('status', 'unknown')
-                        rating = company.get('rating_avg', 0)
-                        
-                        with ui.card().classes('w-full p-4 mb-4'):
-                            with ui.row().classes('w-full items-center justify-between'):
-                                ui.label(f'{company.get("company_name")}').classes('text-lg font-bold')
-                                with ui.row().classes('gap-2'):
-                                    ui.badge(status, color=status_colors.get(status, 'gray'))
-                                    ui.label(f'⭐ {rating}').classes('text-yellow-600 font-bold')
-                            
-                            ui.label(f'Address: {company.get("address")}').classes('text-gray-600')
-                            ui.label(f'Hotline: {company.get("hotline")}').classes('text-gray-600')
-                            ui.label(f'License: {company.get("license_number")}').classes('text-gray-600')
-                            ui.label(f'Contact: {company.get("contact_person")}').classes('text-gray-600')
-                            
-                            # Action buttons
-                            with ui.row().classes('w-full gap-2 mt-2'):
-                                async def view_details(c=company):
-                                    """View company details."""
-                                    ui.notify(f'View details for {c.get("company_name")}', color='info')
-                                
-                                async def approve_company(c=company):
-                                    """Approve a pending company."""
-                                    ui.notify(f'Approved {c.get("company_name")}', color='positive')
-                                    await load_companies()
-                                
-                                async def suspend_company(c=company):
-                                    """Suspend a company."""
-                                    confirmed = await ui.dialog(
-                                        title='Confirm Suspend',
-                                        message=f'Are you sure you want to suspend {c.get("company_name")}?',
-                                        persistent=True
-                                    ).wait()
-                                    
-                                    if confirmed:
-                                        ui.notify(f'Suspended {c.get("company_name")}', color='negative')
-                                        await load_companies()
-                                
-                                ui.button('View Details', on_click=view_details).props('outline')
-                                
-                                if status == 'pending':
-                                    ui.button('Approve', on_click=approve_company).props('color=positive')
-                                
-                                if status == 'active':
-                                    ui.button('Suspend', on_click=suspend_company).props('color=negative outline')
-            
-            # Initial load
-            ui.timer(1.0, load_companies, once=True)
 
+    @ui.page('/admin/companies')
+    async def companies_page():
+        if not require_role("admin"):
+            return
+
+        with page_layout("/admin/companies", title="Quản Lý Đơn Vị"):
+            
+            with ui.row().classes("w-full items-center justify-between mb-4"):
+                with ui.column().classes("gap-0"):
+                    ui.label("🏢 Quản Lý Đơn Vị Cứu Hộ").classes("text-3xl font-bold text-gray-800")
+                    ui.label("Duyệt và kiểm soát các đối tác cứu hộ trên hệ thống").classes("text-gray-500")
+                
+                refresh_btn = ui.button(icon="refresh", on_click=lambda: _load_data()).props("flat round color=indigo")
+
+            # Bộ lọc
+            with ui.row().classes("w-full items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6"):
+                search_input = ui.input(placeholder="Tìm tên công ty, hotline, số giấy phép...", on_change=lambda: _load_data()).classes("flex-1").props("outlined dense clearable icon=search")
+                
+                ui.label("Trạng thái:").classes("text-gray-600 font-medium")
+                status_filter = ui.select(
+                    options={'all': 'Tất cả', 'active': 'Đang hoạt động', 'pending': 'Chờ duyệt', 'suspended': 'Đang tạm dừng'},
+                    value='all',
+                    on_change=lambda: _load_data()
+                ).classes("w-56").props("outlined dense")
+
+            # Container
+            container = ui.column().classes("w-full gap-4")
+
+        # ── Logic ────────────────────────────────────────────────────────
+        
+        async def _load_data():
+            refresh_btn.props("loading")
+            container.clear()
+            try:
+                all_comps = await get_companies()
+                
+                # Filter
+                filtered = all_comps
+                if status_filter.value != 'all':
+                    filtered = [c for c in filtered if c['status'] == status_filter.value]
+                if search_input.value:
+                    s = search_input.value.lower()
+                    filtered = [c for c in filtered if s in c['company_name'].lower() or s in (c.get('hotline') or '').lower()]
+
+                with container:
+                    if not filtered:
+                        ui.label("Không tìm thấy đơn vị nào").classes("w-full text-center py-10 text-gray-400 italic")
+                    else:
+                        for c in filtered:
+                            _render_company_card(c)
+            except Exception as e:
+                ui.notify(f"Lỗi: {e}", type="negative")
+            finally:
+                refresh_btn.props(remove="loading")
+
+        def _render_company_card(c):
+            status_map = {
+                "active": ("Hoạt động", "green"),
+                "pending": ("Chờ duyệt", "amber"),
+                "suspended": ("Tạm dừng", "red"),
+            }
+            label, color = status_map.get(c['status'], (c['status'], "gray"))
+
+            with ui.card().classes("w-full rounded-2xl p-6 shadow-sm border border-gray-100 hover:border-indigo-200 transition-all"):
+                with ui.row().classes("w-full items-start justify-between"):
+                    with ui.row().classes("items-center gap-4"):
+                        ui.avatar(icon="business").classes(f"bg-{color}-100 text-{color}-600")
+                        with ui.column().classes("gap-0"):
+                            ui.label(c['company_name']).classes("font-bold text-xl text-gray-800")
+                            ui.label(f"GPKD: {c.get('license_number', 'N/A')}").classes("text-xs text-gray-400 font-mono")
+                    
+                    with ui.column().classes("items-end gap-2"):
+                        ui.label(label).classes(f"text-[10px] font-bold uppercase px-3 py-1 rounded-full bg-{color}-50 text-{color}-600 border border-{color}-100")
+                        with ui.row().classes("items-center gap-1"):
+                            ui.label(f"{c.get('rating_avg', 0)}").classes("font-bold text-amber-500")
+                            ui.icon("star", color="amber", size="1rem")
+
+                with ui.row().classes("mt-4 gap-10"):
+                    with ui.column().classes("gap-1"):
+                        ui.label("Hotline").classes("text-[10px] text-gray-400 uppercase font-bold")
+                        ui.label(c.get('hotline', 'N/A')).classes("font-bold text-indigo-600")
+                    
+                    with ui.column().classes("gap-1"):
+                        ui.label("Địa chỉ").classes("text-[10px] text-gray-400 uppercase font-bold")
+                        ui.label(c.get('address', 'N/A')).classes("text-sm text-gray-600 max-w-md")
+                    
+                    with ui.column().classes("gap-1"):
+                        ui.label("Phạm vi phục vụ").classes("text-[10px] text-gray-400 uppercase font-bold")
+                        ui.label(f"{c.get('service_radius_km', 0)} km").classes("text-sm text-gray-600")
+
+                ui.separator().classes("my-4 opacity-50")
+                
+                with ui.row().classes("w-full justify-end gap-2"):
+                    if c['status'] == 'pending':
+                        ui.button("DUYỆT ĐƠN VỊ", icon="check", on_click=lambda: _update_status(c, 'active')).classes("bg-green-600 text-white font-bold rounded-xl px-6")
+                    
+                    if c['status'] == 'active':
+                        ui.button("TẠM DỪNG", icon="block", on_click=lambda: _update_status(c, 'suspended')).classes("bg-red-50 text-red-600 font-bold rounded-xl px-6").props("flat")
+                    
+                    if c['status'] == 'suspended':
+                        ui.button("KÍCH HOẠT LẠI", icon="play_arrow", on_click=lambda: _update_status(c, 'active')).classes("bg-green-50 text-green-600 font-bold rounded-xl px-6").props("flat")
+
+        async def _update_status(company, status):
+            try:
+                await update_company_status(company['id'], status)
+                ui.notify(f"Đã cập nhật trạng thái: {status}", type="info")
+                await _load_data()
+            except Exception as e:
+                ui.notify(f"Lỗi: {e}", type="negative")
+
+        await _load_data()

@@ -2,7 +2,7 @@
 Authentication API service for login and registration.
 """
 from typing import Dict, Any, Optional
-from .api_client import api_client
+from services.api_client import api_client
 
 
 async def login(username: str, password: str) -> Dict[str, Any]:

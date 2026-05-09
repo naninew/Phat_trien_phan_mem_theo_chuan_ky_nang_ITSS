@@ -1,359 +1,199 @@
 """
 API Integration Tests
-Tests for FastAPI endpoints.
+Tests for FastAPI endpoints matching the current backend architecture.
 """
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
-
-from tests.fixtures import db_session, admin_user, company_user, customer_user, test_company, test_vehicle, override_get_db
+from app.main import app
+from app.database import get_db
+from tests.fixtures import (
+    db_session, test_engine, override_get_db, 
+    test_admin, test_customer, test_company_staff, 
+    test_company, test_service, test_vehicle
+)
 
 
 class TestAuthAPI:
     """Test cases for Authentication API endpoints."""
     
     def test_register_user(self, db_session, override_get_db):
-        """Test user registration endpoint."""
-        from backend.main import app
-        
-        # Override dependency
+        """Test user registration."""
         app.dependency_overrides[get_db] = override_get_db
-        
         client = TestClient(app)
         
-        response = client.post(
-            "/api/v1/auth/register",
-            json={
-                "username": "newuser",
-                "email": "newuser@example.com",
-                "password": "SecurePass123!",
-                "role": "CUSTOMER",
-                "full_name": "New User"
-            }
-        )
+        payload = {
+            "username": "tester123",
+            "password": "Password123!",
+            "full_name": "Test User",
+            "phone": "0988888888",
+            "email": "tester@example.com"
+        }
         
-        assert response.status_code == 201
+        response = client.post("/api/v1/auth/register", json=payload)
+        assert response.status_code == 200
         data = response.json()
-        assert data["username"] == "newuser"
-        assert data["email"] == "newuser@example.com"
+        assert data["code"] == 200
+        assert data["data"]["username"] == "tester123"
         
         app.dependency_overrides.clear()
-    
-    def test_login_success(self, db_session, override_get_db, admin_user):
+
+    def test_login_success(self, db_session, override_get_db, test_customer):
         """Test successful login."""
-        from backend.main import app
-        
         app.dependency_overrides[get_db] = override_get_db
-        
         client = TestClient(app)
         
-        response = client.post(
-            "/api/v1/auth/login",
-            json={
-                "email": admin_user.email,
-                "password": "SecurePass123!"
-            }
-        )
+        payload = {
+            "username": test_customer.username,
+            "password": "Pass123!" # Khớp với fixture
+        }
         
+        response = client.post("/api/v1/auth/login", json=payload)
         assert response.status_code == 200
         data = response.json()
-        assert "access_token" in data
-        assert data["token_type"] == "bearer"
-        
-        app.dependency_overrides.clear()
-    
-    def test_login_wrong_password(self, db_session, override_get_db, admin_user):
-        """Test login with wrong password."""
-        from backend.main import app
-        
-        app.dependency_overrides[get_db] = override_get_db
-        
-        client = TestClient(app)
-        
-        response = client.post(
-            "/api/v1/auth/login",
-            json={
-                "email": admin_user.email,
-                "password": "WrongPassword!"
-            }
-        )
-        
-        assert response.status_code == 401
+        assert "access_token" in data["data"]
+        assert data["data"]["user"]["username"] == test_customer.username
         
         app.dependency_overrides.clear()
 
 
-class TestUserAPI:
-    """Test cases for User API endpoints."""
-    
-    def test_get_current_user(self, db_session, override_get_db, admin_user, auth_headers):
-        """Test getting current user profile."""
-        from backend.main import app
-        
+class TestRescueAPI:
+    """Test cases for Rescue operations."""
+
+    def test_get_services(self, db_session, override_get_db, test_service):
+        """Test getting list of services."""
         app.dependency_overrides[get_db] = override_get_db
-        
         client = TestClient(app)
         
-        response = client.get(
-            "/api/v1/users/me",
-            headers=auth_headers
-        )
-        
+        response = client.get("/api/v1/rescue/services")
         assert response.status_code == 200
         data = response.json()
-        assert data["username"] == admin_user.username
-        assert data["email"] == admin_user.email
+        assert len(data["data"]) >= 1
+        assert data["data"][0]["service_name"] == test_service.service_name
         
         app.dependency_overrides.clear()
-    
-    def test_update_user_profile(self, db_session, override_get_db, admin_user, auth_headers):
-        """Test updating user profile."""
-        from backend.main import app
-        
+
+    def test_find_nearby_companies(self, db_session, override_get_db, test_company, test_service):
+        """Test searching for nearby companies."""
         app.dependency_overrides[get_db] = override_get_db
-        
         client = TestClient(app)
         
-        response = client.put(
-            "/api/v1/users/me",
-            headers=auth_headers,
-            json={
-                "full_name": "Updated Name",
-                "phone": "+1234567890"
-            }
-        )
+        # Vị trí gần Hồ Hoàn Kiếm (khớp với fixture)
+        params = {
+            "latitude": 21.028,
+            "longitude": 105.854,
+            "service_id": test_service.id,
+            "radius_km": 10.0
+        }
+        
+        response = client.get("/api/v1/rescue/companies/nearby", params=params)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["data"]) >= 1
+        assert data["data"][0]["company_name"] == test_company.company_name
+        
+        app.dependency_overrides.clear()
+
+    def test_create_rescue_request(self, db_session, override_get_db, test_customer, test_service, test_company):
+        """Test creating a new rescue request."""
+        app.dependency_overrides[get_db] = override_get_db
+        client = TestClient(app)
+        
+        # Login để lấy token
+        login_res = client.post("/api/v1/auth/login", json={"username": test_customer.username, "password": "Pass123!"})
+        token = login_res.json()["data"]["access_token"]
+        
+        payload = {
+            "service_id": test_service.id,
+            "company_id": test_company.id,
+            "latitude": 21.028,
+            "longitude": 105.854,
+            "address_description": "Ngã tư Tràng Tiền",
+            "car_issue_detail": "Xe bị xịt lốp",
+            "payment_method": "cash"
+        }
+        
+        headers = {"Authorization": f"Bearer {token}"}
+        response = client.post("/api/v1/rescue/requests", json=payload, headers=headers)
         
         assert response.status_code == 200
         data = response.json()
-        assert data["full_name"] == "Updated Name"
-        assert data["phone"] == "+1234567890"
+        assert data["data"]["status"] == "pending"
+        assert data["data"]["address_description"] == payload["address_description"]
         
         app.dependency_overrides.clear()
 
 
-class TestCompanyAPI:
-    """Test cases for Company API endpoints."""
-    
-    def test_create_company(self, db_session, override_get_db, company_user, auth_headers):
-        """Test creating a company."""
-        from backend.main import app
-        
+class TestCompanyWorkflow:
+    """Test cases for company staff operations."""
+
+    def test_get_company_queue(self, db_session, override_get_db, test_company_staff, test_company):
+        """Test getting the queue for a company."""
         app.dependency_overrides[get_db] = override_get_db
-        
         client = TestClient(app)
         
-        response = client.post(
-            "/api/v1/companies",
-            headers=auth_headers,
-            json={
-                "name": "API Test Company",
-                "address": "123 API Street",
-                "phone": "+1112223333",
-                "email": "api@company.com"
-            }
-        )
+        # Login as staff
+        login_res = client.post("/api/v1/auth/login", json={"username": test_company_staff.username, "password": "Pass123!"})
+        token = login_res.json()["data"]["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
         
-        assert response.status_code == 201
-        data = response.json()
-        assert data["name"] == "API Test Company"
+        response = client.get("/api/v1/rescue/queue", headers=headers)
+        assert response.status_code == 200
+        assert "data" in response.json()
         
         app.dependency_overrides.clear()
-    
-    def test_get_company_list(self, db_session, override_get_db, test_company, auth_headers):
-        """Test getting list of companies."""
-        from backend.main import app
-        
+
+    def test_accept_request(self, db_session, override_get_db, test_company_staff, test_vehicle):
+        """Test accepting a request (Requires an existing request)."""
         app.dependency_overrides[get_db] = override_get_db
-        
         client = TestClient(app)
         
-        response = client.get(
-            "/api/v1/companies",
-            headers=auth_headers
+        # 1. Tạo request trước (bằng customer)
+        from app.models.user import UserRole
+        from app.models.request import RescueRequest
+        
+        # Mock request trực tiếp vào DB để nhanh
+        req = RescueRequest(
+            user_id=1, # Mock ID
+            company_id=test_vehicle.company_id,
+            service_id=1,
+            latitude=21.0, longitude=105.0,
+            address_description="Test", car_issue_detail="Test",
+            status="pending"
         )
+        db_session.add(req)
+        db_session.flush()
+        db_session.refresh(req)
+        
+        # 2. Login as staff
+        login_res = client.post("/api/v1/auth/login", json={"username": test_company_staff.username, "password": "Pass123!"})
+        token = login_res.json()["data"]["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        # 3. Chấp nhận
+        params = {"eta_minutes": 20, "vehicle_id": test_vehicle.id}
+        response = client.post(f"/api/v1/rescue/requests/{req.id}/accept", params=params, headers=headers)
         
         assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, list)
-        assert len(data) >= 1
-        
-        app.dependency_overrides.clear()
-    
-    def test_get_company_by_id(self, db_session, override_get_db, test_company, auth_headers):
-        """Test getting company by ID."""
-        from backend.main import app
-        
-        app.dependency_overrides[get_db] = override_get_db
-        
-        client = TestClient(app)
-        
-        response = client.get(
-            f"/api/v1/companies/{test_company.id}",
-            headers=auth_headers
-        )
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert data["id"] == test_company.id
-        assert data["name"] == test_company.name
+        assert response.json()["data"]["status"] == "accepted"
         
         app.dependency_overrides.clear()
 
 
-class TestVehicleAPI:
-    """Test cases for Vehicle API endpoints."""
-    
-    def test_create_vehicle(self, db_session, override_get_db, test_company, auth_headers):
-        """Test creating a vehicle."""
-        from backend.main import app
-        
-        app.dependency_overrides[get_db] = override_get_db
-        
-        client = TestClient(app)
-        
-        response = client.post(
-            "/api/v1/vehicles",
-            headers=auth_headers,
-            json={
-                "license_plate": "API-123",
-                "vehicle_type": "TRUCK",
-                "capacity": 1500,
-                "company_id": test_company.id
-            }
-        )
-        
-        assert response.status_code == 201
-        data = response.json()
-        assert data["license_plate"] == "API-123"
-        
-        app.dependency_overrides.clear()
-    
-    def test_get_vehicles_by_company(self, db_session, override_get_db, test_company, test_vehicle, auth_headers):
-        """Test getting vehicles by company."""
-        from backend.main import app
-        
-        app.dependency_overrides[get_db] = override_get_db
-        
-        client = TestClient(app)
-        
-        response = client.get(
-            f"/api/v1/vehicles/company/{test_company.id}",
-            headers=auth_headers
-        )
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, list)
-        assert len(data) >= 1
-        
-        app.dependency_overrides.clear()
-    
-    def test_update_vehicle_status(self, db_session, override_get_db, test_vehicle, auth_headers):
-        """Test updating vehicle status."""
-        from backend.main import app
-        
-        app.dependency_overrides[get_db] = override_get_db
-        
-        client = TestClient(app)
-        
-        response = client.patch(
-            f"/api/v1/vehicles/{test_vehicle.id}/status",
-            headers=auth_headers,
-            json={"status": "IN_SERVICE"}
-        )
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "IN_SERVICE"
-        
-        app.dependency_overrides.clear()
+class TestAdminAPI:
+    """Test cases for admin management."""
 
-
-class TestQueueAPI:
-    """Test cases for Queue API endpoints."""
-    
-    def test_create_queue(self, db_session, override_get_db, test_vehicle, customer_user, auth_headers):
-        """Test creating a queue entry."""
-        from backend.main import app
-        
+    def test_get_stats(self, db_session, override_get_db, test_admin):
+        """Test getting system stats."""
         app.dependency_overrides[get_db] = override_get_db
-        
         client = TestClient(app)
         
-        response = client.post(
-            "/api/v1/queues",
-            headers=auth_headers,
-            json={
-                "vehicle_id": test_vehicle.id,
-                "service_type": "WASH",
-                "priority": "NORMAL",
-                "estimated_duration": 30
-            }
-        )
+        login_res = client.post("/api/v1/auth/login", json={"username": test_admin.username, "password": "Pass123!"})
+        token = login_res.json()["data"]["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
         
-        assert response.status_code == 201
-        data = response.json()
-        assert data["service_type"] == "WASH"
-        assert data["status"] == "WAITING"
-        
-        app.dependency_overrides.clear()
-    
-    def test_get_my_queues(self, db_session, override_get_db, test_queue, auth_headers):
-        """Test getting current user's queues."""
-        from backend.main import app
-        
-        app.dependency_overrides[get_db] = override_get_db
-        
-        client = TestClient(app)
-        
-        response = client.get(
-            "/api/v1/queues/my",
-            headers=auth_headers
-        )
-        
+        response = client.get("/api/v1/admin/stats", headers=headers)
         assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, list)
-        
-        app.dependency_overrides.clear()
-    
-    def test_update_queue_status(self, db_session, override_get_db, test_queue, auth_headers):
-        """Test updating queue status."""
-        from backend.main import app
-        
-        app.dependency_overrides[get_db] = override_get_db
-        
-        client = TestClient(app)
-        
-        response = client.patch(
-            f"/api/v1/queues/{test_queue.id}/status",
-            headers=auth_headers,
-            json={"status": "IN_PROGRESS"}
-        )
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "IN_PROGRESS"
-        
-        app.dependency_overrides.clear()
-    
-    def test_get_queue_position(self, db_session, override_get_db, test_queue, auth_headers):
-        """Test getting queue position."""
-        from backend.main import app
-        
-        app.dependency_overrides[get_db] = override_get_db
-        
-        client = TestClient(app)
-        
-        response = client.get(
-            f"/api/v1/queues/{test_queue.id}/position",
-            headers=auth_headers
-        )
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert "position" in data
-        assert data["position"] >= 1
+        assert "total_users" in response.json()["data"]
         
         app.dependency_overrides.clear()

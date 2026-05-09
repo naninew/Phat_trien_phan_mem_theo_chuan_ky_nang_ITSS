@@ -1,185 +1,117 @@
 """
-Modern Responsive Navigation Bar Component
-Supports desktop horizontal menu and mobile hamburger drawer
+Navigation Bar Component – tự lấy role/name từ session NiceGUI.
+Không cần truyền user_role hay user_name qua tham số nữa.
 """
 from nicegui import ui
 from typing import Optional, List, Dict, Callable
 
-# Menu items configuration by role
-MENU_ITEMS = {
-    'customer': [
-        {'label': 'Dashboard', 'icon': '🏠', 'route': '/customer/dashboard'},
-        {'label': 'Find Rescue', 'icon': '🆘', 'route': '/customer/find-rescue'},
-        {'label': 'My Requests', 'icon': '📋', 'route': '/customer/requests'},
-        {'label': 'Profile', 'icon': '👤', 'route': '/customer/profile'},
+from core.auth import get_user_role, get_user_name, logout_user
+
+APP_TITLE = "🚑 Cứu Hộ Xe"
+
+MENU_ITEMS: Dict[str, List[Dict]] = {
+    "customer": [
+        {"label": "Trang Chủ",       "icon": "home",       "route": "/customer/dashboard"},
+        {"label": "Tìm Cứu Hộ",      "icon": "search",     "route": "/customer/find-rescue"},
+        {"label": "Yêu Cầu Của Tôi", "icon": "list",       "route": "/customer/requests"},
     ],
-    'company_staff': [
-        {'label': 'Dashboard', 'icon': '🏠', 'route': '/company/dashboard'},
-        {'label': 'Queue Management', 'icon': '📊', 'route': '/company/queue'},
-        {'label': 'Fleet Tracking', 'icon': '🚗', 'route': '/company/fleet'},
-        {'label': 'Profile', 'icon': '👤', 'route': '/company/profile'},
+    "company_staff": [
+        {"label": "Tổng Quan",    "icon": "dashboard",   "route": "/company/dashboard"},
+        {"label": "Hàng Đợi",    "icon": "queue",       "route": "/company/queue"},
+        {"label": "Đội Xe",      "icon": "directions_car", "route": "/company/fleet"},
+        {"label": "Hồ Sơ Cty",  "icon": "business",    "route": "/company/profile"},
     ],
-    'admin': [
-        {'label': 'Dashboard', 'icon': '🏠', 'route': '/admin/dashboard'},
-        {'label': 'User Management', 'icon': '👥', 'route': '/admin/users'},
-        {'label': 'Company Management', 'icon': '🏢', 'route': '/admin/companies'},
-        {'label': 'System Settings', 'icon': '⚙️', 'route': '/admin/settings'},
+    "admin": [
+        {"label": "Tổng Quan",     "icon": "dashboard",   "route": "/admin/dashboard"},
+        {"label": "Người Dùng",    "icon": "people",      "route": "/admin/users"},
+        {"label": "Công Ty",       "icon": "business",    "route": "/admin/companies"},
     ],
 }
 
-def create_navbar(
-    user_role: Optional[str] = None,
-    user_name: Optional[str] = None,
-    on_logout: Optional[Callable] = None,
-    on_menu_click: Optional[Callable] = None,
-    title: str = "RescueConnect"
-):
-    """
-    Create a modern responsive navigation bar
-    
-    Args:
-        user_role: Current user role (customer, company_staff, admin)
-        user_name: Display name of logged-in user
-        on_logout: Callback function for logout action
-        on_menu_click: Callback function when menu item is clicked
-        title: Application title
-    """
-    
-    # Get menu items for current role
-    items = MENU_ITEMS.get(user_role, []) if user_role else []
-    
-    # Create header
-    with ui.header().classes('bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm') as header:
-        with ui.element('div').classes('container mx-auto px-4'):
-            with ui.element('div').classes('flex items-center justify-between h-16'):
-                
-                # Left side: Logo and Title
-                with ui.element('div').classes('flex items-center gap-3'):
-                    ui.html('<span class="text-3xl">🚑</span>')
-                    ui.label(title).classes('text-xl font-bold text-indigo-600')
-                
-                # Center: Desktop Navigation (hidden on mobile)
-                with ui.element('div').classes('hidden lg:flex items-center space-x-1'):
-                    for item in items:
-                        with ui.button(
-                            on_click=lambda i=item: (
-                                ui.navigate.to(i['route']) if not on_menu_click else on_menu_click(i)
-                            )
-                        ).classes('''
-                            px-4 py-2 rounded-lg text-sm font-medium
-                            text-gray-600 hover:text-indigo-600 hover:bg-indigo-50
-                            transition-all duration-200
-                        '''):
-                            ui.html(f'<span class="mr-2">{i["icon"]}</span>')
-                            ui.label(i['label'])
-                
-                # Right side: User info and actions
-                with ui.element('div').classes('flex items-center gap-3'):
-                    # User info (desktop only)
-                    if user_name and user_role:
-                        with ui.element('div').classes('hidden md:flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg'):
-                            ui.html('<span class="text-lg">👤</span>')
-                            with ui.element('div'):
-                                ui.label(user_name).classes('text-sm font-medium text-gray-900')
-                                ui.label(user_role.replace('_', ' ').title()).classes('text-xs text-gray-500')
-                    
-                    # Logout button
-                    if on_logout:
-                        with ui.button(on_click=on_logout).classes('''
-                            px-3 py-1.5 rounded-lg text-sm font-medium
-                            bg-gray-100 hover:bg-gray-200 text-gray-700
-                            transition-all duration-200 flex items-center gap-2
-                        '''):
-                            ui.html('<span>🚪</span>')
-                            ui.label('Logout')
-                    
-                    # Mobile menu button (hamburger)
-                    with ui.button(icon='menu').classes('lg:hidden nicegui-button p-2') as mobile_btn:
-                        pass
-                    
-                    # Mobile drawer
-                    with ui.drawer().props('side=right overlay') as drawer:
-                        with ui.element('div').classes('p-4 w-64'):
-                            # Drawer header
-                            with ui.element('div').classes('flex items-center justify-between mb-6'):
-                                ui.label('Menu').classes('text-lg font-semibold')
-                                with ui.button(icon='close').props('flat round dense'):
-                                    drawer.props('model-value=false')
-                            
-                            # User info in drawer
-                            if user_name:
-                                with ui.element('div').classes('mb-4 p-3 bg-gray-50 rounded-lg'):
-                                    with ui.element('div').classes('flex items-center gap-3'):
-                                        ui.html('<span class="text-2xl">👤</span>')
-                                        with ui.element('div'):
-                                            ui.label(user_name).classes('font-semibold')
-                                            ui.label(user_role.replace('_', ' ').title() if user_role else 'Guest').classes('text-sm text-gray-500')
-                                
-                                ui.separator().classes('my-4')
-                            
-                            # Mobile menu items
-                            for item in items:
-                                with ui.button(
-                                    on_click=lambda i=item: (
-                                        ui.navigate.to(i['route']),
-                                        drawer.props('model-value=false')
-                                    ) if not on_menu_click else on_menu_click(i)
-                                ).classes('''
-                                    w-full justify-start px-4 py-3 mb-2 rounded-lg
-                                    text-gray-700 hover:bg-indigo-50 hover:text-indigo-600
-                                    transition-all duration-200
-                                '''):
-                                    ui.html(f'<span class="mr-3 text-lg">{i["icon"]}</span>')
-                                    ui.label(i['label'])
-                            
-                            ui.separator().classes('my-4')
-                            
-                            # Logout in drawer
-                            if on_logout:
-                                with ui.button(on_click=lambda: (on_logout(), drawer.props('model-value=false'))).classes('''
-                                    w-full px-4 py-3 rounded-lg text-sm font-medium
-                                    bg-red-50 hover:bg-red-100 text-red-600
-                                    transition-all duration-200 flex items-center justify-center gap-2
-                                '''):
-                                    ui.html('<span>🚪</span>')
-                                    ui.label('Logout')
-                    
-                    # Connect hamburger to drawer
-                    mobile_btn.on('click', lambda: drawer.open())
-    
-    return header
 
+def create_navbar(current_route: str = "") -> None:
+    """
+    Tạo navigation bar responsive với thiết kế Material 3.
+    """
+    role = get_user_role() or ""
+    name = get_user_name()
+    items = MENU_ITEMS.get(role, [])
 
-def create_sidebar(menu_items: List[Dict], active_route: str = '', on_click: Optional[Callable] = None):
-    """
-    Create a sidebar navigation for dashboard pages
-    
-    Args:
-        menu_items: List of menu item dictionaries
-        active_route: Currently active route for highlighting
-        on_click: Callback when menu item is clicked
-    """
-    
-    with ui.element('aside').classes('''
-        hidden lg:block w-64 bg-white border-r border-gray-200 
-        min-h-screen fixed left-0 top-16 overflow-y-auto
-    ''') as sidebar:
-        with ui.element('div').classes('p-4'):
-            ui.label('Navigation').classes('text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4')
-            
-            for item in menu_items:
-                is_active = item.get('route', '') == active_route
-                
-                with ui.button(
-                    on_click=lambda i=item: (
-                        ui.navigate.to(i['route']) if not on_click else on_click(i)
-                    )
-                ).classes(f'''
-                    w-full justify-start px-4 py-3 mb-2 rounded-lg
-                    transition-all duration-200
-                    {"bg-indigo-50 text-indigo-600 font-semibold" if is_active else "text-gray-700 hover:bg-gray-50"}
-                '''):
-                    ui.html(f'<span class="mr-3 text-lg">{item.get("icon", "📍")}</span>')
-                    ui.label(item.get('label', ''))
-    
-    return sidebar
+    with ui.header().classes(
+        "shadow-md sticky top-0 z-50 py-1"
+    ).style("background: #1a73e8; border-bottom: 1px solid rgba(255,255,255,0.1)"):
+        with ui.row().classes("w-full items-center justify-between px-6 max-w-7xl mx-auto"):
+
+            # ── Logo + Title ────────────────────────────────────────────────
+            with ui.row().classes("items-center gap-3 cursor-pointer group").on(
+                "click", lambda: ui.navigate.to(
+                    items[0]["route"] if items else "/login"
+                )
+            ):
+                with ui.element('div').classes('p-2 bg-white/20 rounded-xl group-hover:scale-110 transition-transform'):
+                    ui.icon("local_taxi", size="1.8rem").classes("text-white")
+                ui.label("Rescue System").classes("text-[#f0f4f8] font-bold text-xl font-outfit tracking-tight")
+
+            # ── Desktop menu ────────────────────────────────────────────────
+            with ui.row().classes("hidden md:flex items-center gap-2"):
+                for item in items:
+                    is_active = current_route.startswith(item["route"])
+                    if is_active:
+                        btn = ui.button(item["label"], icon=item["icon"], 
+                                      on_click=lambda r=item["route"]: ui.navigate.to(r))
+                        btn.classes("px-4 py-2 rounded-full font-bold bg-primary-container text-primary shadow-none").props("unelevated")
+                    else:
+                        btn = ui.button(item["label"], icon=item["icon"],
+                                      on_click=lambda r=item["route"]: ui.navigate.to(r))
+                        btn.classes("px-4 py-2 rounded-full font-medium text-on-surface-variant hover:bg-surface-variant transition-colors").props("flat")
+
+            # ── Right: user info + logout ───────────────────────────────────
+            with ui.row().classes("items-center gap-3"):
+                # User info (desktop)
+                with ui.row().classes("hidden lg:flex items-center gap-3 pr-4 border-r border-white/20 cursor-pointer hover:opacity-80 transition-opacity").on('click', lambda: ui.navigate.to("/profile")):
+                    with ui.column().classes("gap-0 items-end"):
+                        ui.label(name).classes("text-[#f0f4f8] font-semibold text-sm")
+                        ui.label(role.replace("_", " ").title()).classes("text-white/60 text-[10px] opacity-70")
+                    ui.avatar('person', color='white', text_color='#1a73e8').classes('shadow-sm')
+
+                # Logout
+                ui.button(
+                    icon="logout",
+                    on_click=logout_user,
+                ).classes("text-[#f0f4f8] hover:bg-white/10 rounded-full").props("flat round").tooltip("Đăng xuất")
+
+                # ── Mobile hamburger ────────────────────────────────────────
+                with ui.button(icon="menu").classes("md:hidden text-[#f0f4f8]").props("flat round") as ham_btn:
+                    pass
+
+    # ── Mobile drawer ───────────────────────────────────────────────────
+    with ui.drawer(side="right", elevated=True).classes("bg-surface w-72") as mobile_drawer:
+        with ui.column().classes("p-6 gap-4 w-full"):
+            # Header in drawer
+            with ui.row().classes("items-center gap-3 mb-4 cursor-pointer hover:bg-surface-variant p-2 rounded-xl transition-colors w-full").on('click', lambda: (mobile_drawer.hide(), ui.navigate.to("/profile"))):
+                ui.avatar('person', color='primary', text_color='#f0f4f8')
+                with ui.column().classes("gap-0"):
+                    ui.label(name).classes("text-on-surface font-bold")
+                    ui.label(role).classes("text-on-surface-variant text-xs")
+
+            ui.separator().classes("mb-2")
+
+            for item in items:
+                is_active = current_route.startswith(item["route"])
+                btn = ui.button(
+                    item["label"],
+                    icon=item["icon"],
+                    on_click=lambda r=item["route"]: (mobile_drawer.hide(), ui.navigate.to(r)),
+                ).classes(
+                    "w-full justify-start rounded-2xl px-4 py-3 " +
+                    ("bg-primary-container text-primary font-bold" if is_active else "text-on-surface-variant hover:bg-surface-variant")
+                ).props("flat")
+
+            ui.separator().classes("mt-4 mb-2")
+            ui.button(
+                "Đăng Xuất",
+                icon="logout",
+                on_click=lambda: (mobile_drawer.hide(), logout_user()),
+            ).classes("w-full justify-start text-error hover:bg-red-50 rounded-2xl px-4 py-3").props("flat")
+
+    ham_btn.on("click", lambda: mobile_drawer.toggle())

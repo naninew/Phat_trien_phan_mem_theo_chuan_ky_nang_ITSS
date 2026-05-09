@@ -9,10 +9,22 @@ import os
 import uuid
 from datetime import datetime
 
-from ..database import get_db
-from ..services import auth_svc, rescue_svc
-from ..utils.response import success_response, error_response
-from ..utils.jwt_helper import get_current_user_from_token
+from app.database import get_db
+from app.services import auth_svc, rescue_svc
+from app.utils.response import success_response, error_response
+from app.utils.jwt_helper import get_current_user_from_token
+from pydantic import BaseModel
+
+class UserProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+
+class CompanyProfileUpdate(BaseModel):
+    company_name: Optional[str] = None
+    address: Optional[str] = None
+    hotline: Optional[str] = None
+    service_radius_km: Optional[float] = None
 
 router = APIRouter(prefix="/profile", tags=["Profile Management"])
 
@@ -107,18 +119,12 @@ def get_my_profile(
 
 @router.put("/me", response_model=dict)
 def update_my_profile(
-    full_name: Optional[str] = Form(None),
-    phone: Optional[str] = Form(None),
-    email: Optional[str] = Form(None),
+    profile_data: UserProfileUpdate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user_from_token),
 ) -> dict:
     """
     Update current user's profile information.
-    
-    - **full_name**: New full name (optional)
-    - **phone**: New phone number (optional)
-    - **email**: New email address (optional)
     """
     user_id = current_user["user_id"]
     user = auth_svc.get_user_by_id(db, user_id)
@@ -130,19 +136,19 @@ def update_my_profile(
         )
     
     # Update fields if provided
-    if full_name is not None:
-        user.full_name = full_name
-    if phone is not None:
-        user.phone = phone
-    if email is not None:
+    if profile_data.full_name is not None:
+        user.full_name = profile_data.full_name
+    if profile_data.phone is not None:
+        user.phone = profile_data.phone
+    if profile_data.email is not None:
         # Check if email is already taken by another user
-        existing = auth_svc.get_user_by_email(db, email)
+        existing = auth_svc.get_user_by_email(db, profile_data.email)
         if existing and existing.id != user_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered"
             )
-        user.email = email
+        user.email = profile_data.email
     
     db.commit()
     db.refresh(user)
@@ -200,6 +206,10 @@ def upload_avatar(
     avatar_path = save_uploaded_file(file, user_id)
     
     # Update user record with avatar URL
+    user = auth_svc.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
     user.avatar_url = avatar_path
     db.commit()
     db.refresh(user)
@@ -212,20 +222,12 @@ def upload_avatar(
 
 @router.put("/company", response_model=dict)
 def update_company_profile(
-    company_name: Optional[str] = Form(None),
-    address: Optional[str] = Form(None),
-    hotline: Optional[str] = Form(None),
-    service_radius_km: Optional[float] = Form(None),
+    profile_data: CompanyProfileUpdate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user_from_token),
 ) -> dict:
     """
     Update company profile (for company staff users only).
-    
-    - **company_name**: New company name (optional)
-    - **address**: New address (optional)
-    - **hotline**: New hotline number (optional)
-    - **service_radius_km**: New service radius in km (optional)
     """
     user_id = current_user["user_id"]
     user = auth_svc.get_user_by_id(db, user_id)
@@ -244,14 +246,14 @@ def update_company_profile(
         )
     
     # Update fields if provided
-    if company_name is not None:
-        company.company_name = company_name
-    if address is not None:
-        company.address = address
-    if hotline is not None:
-        company.hotline = hotline
-    if service_radius_km is not None:
-        company.service_radius_km = service_radius_km
+    if profile_data.company_name is not None:
+        company.company_name = profile_data.company_name
+    if profile_data.address is not None:
+        company.address = profile_data.address
+    if profile_data.hotline is not None:
+        company.hotline = profile_data.hotline
+    if profile_data.service_radius_km is not None:
+        company.service_radius_km = profile_data.service_radius_km
     
     db.commit()
     db.refresh(company)

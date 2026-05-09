@@ -6,13 +6,13 @@ from sqlalchemy import or_
 from passlib.context import CryptContext
 from typing import Optional, Tuple
 
-from ..models.user import User, UserRole
-from ..schemas.auth import UserRegister
-from ..utils.jwt_helper import create_access_token, create_refresh_token, get_current_user_from_token
+from app.models.user import User, UserRole
+from app.schemas.auth import UserRegister
+from app.utils.jwt_helper import create_access_token, create_refresh_token, get_current_user_from_token
 
 
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing context - Use pbkdf2_sha256 for better compatibility on Python 3.14
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:

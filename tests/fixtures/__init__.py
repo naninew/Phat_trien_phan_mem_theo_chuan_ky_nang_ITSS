@@ -6,30 +6,27 @@ Provides shared fixtures, database setup, and test utilities.
 import os
 import sys
 import pytest
-from typing import Generator, AsyncGenerator
+from typing import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add backend directory to path
+from pathlib import Path
+backend_dir = str(Path(__file__).resolve().parent.parent.parent / "backend")
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
 
-from backend.database.session import get_db, Base
-from backend.models.user import User, UserRole
-from backend.models.company import Company
-from backend.models.vehicle import Vehicle
-from backend.models.queue import Queue, QueueStatus
-from backend.schemas.user import UserCreate
-from backend.services.user_service import UserService
-from backend.services.company_service import CompanyService
-from backend.services.vehicle_service import VehicleService
-from backend.services.queue_service import QueueService
+from app.database import Base, get_db
+from app.models.user import User, UserRole
+from app.models.company import RescueCompany
+from app.models.vehicle import RescueVehicle
+from app.models.service import Service
+from app.models.request import RescueRequest
+from app.services import auth_svc
 
 # Test Database URL (SQLite in-memory for fast unit tests)
 TEST_DATABASE_URL = "sqlite:///:memory:"
-
-# For integration tests with PostgreSQL (uncomment and configure if needed)
-# TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "postgresql://test:test@localhost:5432/test_db")
 
 
 @pytest.fixture(scope="session")
@@ -37,8 +34,8 @@ def test_engine():
     """Create a test database engine."""
     engine = create_engine(
         TEST_DATABASE_URL,
-        connect_args={"check_same_thread": False} if "sqlite" in TEST_DATABASE_URL else {},
-        poolclass=StaticPool if "sqlite" in TEST_DATABASE_URL else None,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=engine)
     yield engine
@@ -69,98 +66,117 @@ def override_get_db(db_session: Session):
 
 
 @pytest.fixture
-def admin_user(db_session: Session) -> User:
+def test_admin(db_session: Session) -> User:
     """Create a test admin user."""
-    user_data = UserCreate(
-        username="admin_test",
-        email="admin@test.com",
-        password="SecurePass123!",
+    import uuid
+    suffix = str(uuid.uuid4())[:8]
+    user = User(
+        username=f"admin_{suffix}",
+        password_hash=auth_svc.hash_password("Pass123!"),
+        full_name="Test Admin",
+        phone="0900000001",
+        email=f"admin_{suffix}@test.com",
         role=UserRole.ADMIN,
-        full_name="Test Admin"
+        is_active=True
     )
-    user = UserService.create_user(db_session, user_data)
-    db_session.commit()
+    db_session.add(user)
+    db_session.flush()
+    db_session.refresh(user)
     return user
 
 
 @pytest.fixture
-def company_user(db_session: Session) -> User:
-    """Create a test company staff user."""
-    user_data = UserCreate(
-        username="company_test",
-        email="company@test.com",
-        password="SecurePass123!",
-        role=UserRole.COMPANY_STAFF,
-        full_name="Test Company Staff"
-    )
-    user = UserService.create_user(db_session, user_data)
-    db_session.commit()
-    return user
-
-
-@pytest.fixture
-def customer_user(db_session: Session) -> User:
+def test_customer(db_session: Session) -> User:
     """Create a test customer user."""
-    user_data = UserCreate(
-        username="customer_test",
-        email="customer@test.com",
-        password="SecurePass123!",
+    import uuid
+    suffix = str(uuid.uuid4())[:8]
+    user = User(
+        username=f"customer_{suffix}",
+        password_hash=auth_svc.hash_password("Pass123!"),
+        full_name="Test Customer",
+        phone="0900000002",
+        email=f"customer_{suffix}@test.com",
         role=UserRole.CUSTOMER,
-        full_name="Test Customer"
+        is_active=True
     )
-    user = UserService.create_user(db_session, user_data)
-    db_session.commit()
+    db_session.add(user)
+    db_session.flush()
+    db_session.refresh(user)
     return user
 
 
 @pytest.fixture
-def test_company(db_session: Session, company_user: User) -> Company:
-    """Create a test company."""
-    company_data = {
-        "name": "Test Transport Company",
-        "address": "123 Test Street",
-        "phone": "+1234567890",
-        "email": "company@test.com",
-        "owner_id": company_user.id
-    }
-    company = CompanyService.create_company(db_session, **company_data)
-    db_session.commit()
+def test_company_staff(db_session: Session) -> User:
+    """Create a test company staff user."""
+    import uuid
+    suffix = str(uuid.uuid4())[:8]
+    user = User(
+        username=f"staff_{suffix}",
+        password_hash=auth_svc.hash_password("Pass123!"),
+        full_name="Test Staff",
+        phone="0900000003",
+        email=f"staff_{suffix}@test.com",
+        role=UserRole.COMPANY_STAFF,
+        is_active=True
+    )
+    db_session.add(user)
+    db_session.flush()
+    db_session.refresh(user)
+    return user
+
+
+@pytest.fixture
+def test_company(db_session: Session, test_company_staff: User) -> RescueCompany:
+    """Create a test rescue company."""
+    import uuid
+    suffix = str(uuid.uuid4())[:8]
+    company = RescueCompany(
+        company_name=f"Test Rescue Co {suffix}",
+        address="123 Test St, Hanoi",
+        hotline="1900-1111",
+        license_number=f"TEST-{suffix}",
+        latitude=21.0285,
+        longitude=105.8542,
+        owner_id=test_company_staff.id,
+        status="active",
+        is_verified=True
+    )
+    db_session.add(company)
+    db_session.flush()
+    db_session.refresh(company)
     return company
 
 
 @pytest.fixture
-def test_vehicle(db_session: Session, test_company: Company) -> Vehicle:
-    """Create a test vehicle."""
-    vehicle_data = {
-        "license_plate": "ABC-123",
-        "vehicle_type": "TRUCK",
-        "capacity": 1000,
-        "company_id": test_company.id,
-        "status": "AVAILABLE"
-    }
-    vehicle = VehicleService.create_vehicle(db_session, **vehicle_data)
-    db_session.commit()
-    return vehicle
+def test_service(db_session: Session, test_company: RescueCompany) -> Service:
+    """Create a test service for a company."""
+    svc = Service(
+        service_name="Vá lốp test",
+        base_price=100000.0,
+        description="Test service",
+        company_id=test_company.id,
+        is_active=True
+    )
+    db_session.add(svc)
+    db_session.flush()
+    db_session.refresh(svc)
+    return svc
 
 
 @pytest.fixture
-def test_queue(db_session: Session, customer_user: User, test_vehicle: Vehicle) -> Queue:
-    """Create a test queue entry."""
-    queue_data = {
-        "customer_id": customer_user.id,
-        "vehicle_id": test_vehicle.id,
-        "service_type": "WASH",
-        "priority": "NORMAL",
-        "estimated_duration": 30
-    }
-    queue = QueueService.create_queue(db_session, **queue_data)
-    db_session.commit()
-    return queue
-
-
-@pytest.fixture
-def auth_headers(admin_user: User) -> dict:
-    """Generate authentication headers for API tests."""
-    # In real implementation, this would generate a JWT token
-    # For now, we'll use a simple token format
-    return {"Authorization": f"Bearer test_token_{admin_user.id}"}
+def test_vehicle(db_session: Session, test_company: RescueCompany) -> RescueVehicle:
+    """Create a test vehicle for a company."""
+    import uuid
+    suffix = str(uuid.uuid4())[:8]
+    v = RescueVehicle(
+        license_plate=f"29A-{suffix}",
+        vehicle_type="Xe cẩu",
+        capacity="2 tấn",
+        company_id=test_company.id,
+        status="available",
+        is_active=True
+    )
+    db_session.add(v)
+    db_session.flush()
+    db_session.refresh(v)
+    return v

@@ -1,33 +1,48 @@
 """
 Database configuration and session management.
+Supports SQLite (default for dev) and PostgreSQL (for production).
+Switch by setting DATABASE_URL environment variable.
 """
+import os
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from typing import Generator
 
-# PostgreSQL connection URL
-# Format: postgresql://username:password@host:port/database_name
-DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/rescue_system"
+# ─── Database URL ───────────────────────────────────────────────────────────
+# Default: SQLite stored alongside this file (no setup required)
+# For PostgreSQL: set DATABASE_URL=postgresql://user:pass@host:5432/dbname
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_SQLITE_PATH = os.path.join(_BASE_DIR, "rescue_system.db")
 
-# Create engine
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-    echo=False  # Set to True for SQL debugging
+DATABASE_URL: str = os.getenv(
+    "DATABASE_URL",
+    f"sqlite:///{_SQLITE_PATH}"
 )
 
-# Create session factory
+# ─── Engine args (SQLite needs check_same_thread=False) ─────────────────────
+_connect_args = {}
+if DATABASE_URL.startswith("sqlite"):
+    _connect_args = {"check_same_thread": False}
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args=_connect_args,
+    pool_pre_ping=True,
+    echo=os.getenv("SQL_ECHO", "false").lower() == "true",
+)
+
+# ─── Session factory ─────────────────────────────────────────────────────────
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Base class for models
+# ─── Declarative base ────────────────────────────────────────────────────────
 Base = declarative_base()
 
 
+# ─── Dependency ──────────────────────────────────────────────────────────────
 def get_db() -> Generator[Session, None, None]:
     """
-    Dependency to get database session.
-    Yields a database session and ensures it's closed after use.
+    FastAPI dependency: yields a database session and closes it after use.
+    Works with both SQLite and PostgreSQL without any code changes.
     """
     db = SessionLocal()
     try:
@@ -36,14 +51,17 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-def init_db():
+def init_db() -> None:
     """
-    Initialize database by creating all tables.
+    Create all tables. Safe to call multiple times (idempotent).
+    Run once on startup; existing tables are NOT dropped.
     """
+    # Import all models so metadata is populated before create_all
+    from app.models import user, company, service, vehicle, request, review, payment, community  # noqa: F401
     Base.metadata.create_all(bind=engine)
+    print(f"[DB] Connected to: {DATABASE_URL[:50]}...")
+    print("[DB] Tables created/verified.")
 
 
 if __name__ == "__main__":
-    # Run this to create tables
     init_db()
-    print("Database tables created successfully!")

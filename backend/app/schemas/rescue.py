@@ -38,12 +38,14 @@ class ServiceResponse(BaseModel):
 class RescueRequestCreate(BaseModel):
     """Schema for creating a rescue request."""
     service_id: int
+    company_id: Optional[int] = None   # Có thể chọn trước hoặc để hệ thống phân công
     latitude: float = Field(..., ge=-90, le=90)
     longitude: float = Field(..., ge=-180, le=180)
     address_description: str = Field(..., min_length=1, max_length=500)
     car_issue_detail: str = Field(..., min_length=1, max_length=1000)
     images: Optional[List[str]] = None
     payment_method: Optional[str] = "cash"
+
     
     class Config:
         json_schema_extra = {

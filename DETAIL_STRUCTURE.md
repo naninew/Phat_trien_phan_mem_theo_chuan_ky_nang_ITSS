@@ -50,7 +50,8 @@ Hệ thống được phát triển theo kiến trúc **3-tier** với:
 │   │   └── main.py               # FastAPI app initialization
 │   │
 │   ├── requirements.txt          # Python dependencies
-│   └── run.py                    # Backend entry point
+│   ├── run.py                    # Backend entry point
+│   └── generate_seed_data.py     # Database initialization & mock data generator
 │
 ├── frontend/                     # Frontend NiceGUI
 │   ├── core/

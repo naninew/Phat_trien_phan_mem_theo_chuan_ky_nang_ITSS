@@ -5,10 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Any
 
-from ..database import get_db
-from ..schemas.auth import UserRegister, UserLogin, TokenResponse, UserResponse
-from ..services import auth_svc
-from ..utils.response import success_response, error_response
+from app.database import get_db
+from app.schemas.auth import UserRegister, UserLogin, TokenResponse, UserResponse
+from app.services import auth_svc
+from app.utils.response import success_response, error_response
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -95,7 +95,19 @@ def get_current_user(
     
     Requires valid JWT token in Authorization header.
     """
+    user = auth_svc.get_user_by_id(db, current_user["user_id"])
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
     return success_response(
-        data=current_user,
+        data={
+            "id": user.id,
+            "username": user.username,
+            "full_name": user.full_name,
+            "email": user.email,
+            "phone": user.phone,
+            "role": user.role.value,
+            "is_active": user.is_active
+        },
         message="Success"
     )

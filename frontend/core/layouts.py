@@ -4,7 +4,7 @@ Provides mobile-first responsive containers, grids, and layout utilities
 """
 from nicegui import ui
 from typing import Optional, List, Any
-from .theme import SPACING, RADIUS
+from theme import SPACING, RADIUS
 
 class ResponsiveContainer:
     """Responsive container with max-width and auto margins"""

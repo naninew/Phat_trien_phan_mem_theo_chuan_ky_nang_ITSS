@@ -1,10 +1,10 @@
 """
-Authentication and session management for NiceGUI frontend.
+Authentication & session management for NiceGUI frontend.
 """
 from nicegui import app, ui
 from typing import Optional, Dict, Any
 
-from .config import (
+from core.config import (
     SESSION_TOKEN_KEY,
     SESSION_USER_KEY,
     SESSION_ROLE_KEY,
@@ -15,91 +15,83 @@ from .config import (
 )
 
 
-def get_current_user() -> Optional[Dict[str, Any]]:
-    """Get current user from session storage."""
-    return app.storage.user.get(SESSION_USER_KEY)
-
-
+# ──────────────────────────────────────────────────────────────────────────────
+# Session helpers
+# ──────────────────────────────────────────────────────────────────────────────
 def get_access_token() -> Optional[str]:
-    """Get access token from session storage."""
     return app.storage.user.get(SESSION_TOKEN_KEY)
 
 
+def get_current_user() -> Optional[Dict[str, Any]]:
+    return app.storage.user.get(SESSION_USER_KEY)
+
+
 def get_user_role() -> Optional[str]:
-    """Get user role from session storage."""
     return app.storage.user.get(SESSION_ROLE_KEY)
 
 
+def get_user_name() -> str:
+    user = get_current_user()
+    if user:
+        return user.get("full_name") or user.get("username") or "User"
+    return "User"
+
+
 def is_authenticated() -> bool:
-    """Check if user is authenticated."""
     return get_access_token() is not None
 
 
 def login_user(token: str, user_info: Dict[str, Any], role: str) -> None:
-    """
-    Store user authentication data in session.
-    
-    Args:
-        token: Access token
-        user_info: User information dictionary
-        role: User role
-    """
+    """Lưu thông tin đăng nhập vào session."""
     app.storage.user[SESSION_TOKEN_KEY] = token
-    app.storage.user[SESSION_USER_KEY] = user_info
-    app.storage.user[SESSION_ROLE_KEY] = role
+    app.storage.user[SESSION_USER_KEY]  = user_info
+    app.storage.user[SESSION_ROLE_KEY]  = role
 
 
 def logout_user() -> None:
-    """Clear user session and redirect to login."""
+    """Xóa session và chuyển về trang đăng nhập."""
     app.storage.user.clear()
     ui.navigate.to(LOGIN_PAGE)
 
 
-def require_auth():
-    """Decorator-like function to require authentication on a page."""
+# ──────────────────────────────────────────────────────────────────────────────
+# Route guards
+# ──────────────────────────────────────────────────────────────────────────────
+def require_auth() -> bool:
+    """Gọi ở đầu mỗi page cần đăng nhập. Trả về False nếu chưa auth."""
     if not is_authenticated():
         ui.navigate.to(LOGIN_PAGE)
         return False
     return True
 
 
-def require_role(required_role: str):
+def require_role(role: str) -> bool:
     """
-    Check if user has the required role.
-    
-    Args:
-        required_role: Role required to access the page
-    
-    Returns:
-        True if user has the role, False otherwise
+    Kiểm tra role. Nếu không hợp lệ, redirect về dashboard của role hiện tại.
+    Admin luôn được phép truy cập tất cả.
     """
     if not is_authenticated():
         ui.navigate.to(LOGIN_PAGE)
         return False
-    
-    user_role = get_user_role()
-    if user_role != required_role and user_role != "admin":
-        ui.notify("You don't have permission to access this page", color="negative")
-        ui.navigate.to(CUSTOMER_DASHBOARD)
+
+    current_role = get_user_role()
+    if current_role == "admin":
+        return True          # Admin có thể vào mọi trang
+
+    if current_role != role:
+        ui.notify("Bạn không có quyền truy cập trang này", type="negative")
+        # Redirect về đúng dashboard của role hiện tại (không gây loop)
+        ui.navigate.to(get_redirect_url_for_role(current_role))
         return False
-    
+
     return True
 
 
-def get_redirect_url_for_role(role: str) -> str:
-    """
-    Get the default dashboard URL for a given role.
-    
-    Args:
-        role: User role
-    
-    Returns:
-        Redirect URL string
-    """
-    if role == "customer":
-        return CUSTOMER_DASHBOARD
-    elif role == "company_staff":
-        return COMPANY_DASHBOARD
-    elif role == "admin":
-        return ADMIN_DASHBOARD
-    return CUSTOMER_DASHBOARD
+def get_redirect_url_for_role(role: Optional[str]) -> str:
+    """Trả về URL dashboard mặc định theo role."""
+    mapping = {
+        "customer":      CUSTOMER_DASHBOARD,
+        "company_staff": COMPANY_DASHBOARD,
+        "admin":         ADMIN_DASHBOARD,
+    }
+    return mapping.get(role or "", LOGIN_PAGE)
