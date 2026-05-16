@@ -28,6 +28,7 @@ def create_login_page():
                 min-height: 100vh;
                 background-color: var(--surface);
                 display: flex;
+                width: 100%;
             }
             .hero-section {
                 flex: 1;

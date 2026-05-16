@@ -122,6 +122,12 @@ def apply_global_theme():
         .text-contrast-medium {
             color: var(--on-surface-variant) !important;
         }
+        .m3-card:hover {
+            background-color: #eff6ff;
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
+            0 4px 6px -4px rgb(0 0 0 / 0.1);
+            transform: translateY(-2px);
+        }
     </style>
     """)
 
@@ -163,7 +169,7 @@ async def home_page():
             ui.image('/static/hero.png').classes('w-full max-w-lg drop-shadow-2xl rounded-3xl transform hover:scale-105 transition-transform duration-700')
 
     # ── Services Section ─────────────────────────────────────────────────────
-    with ui.column().classes('w-full py-24 bg-white px-8 md:px-24 items-center'):
+    with ui.column().classes('w-full py-24 bg-white px-8 md:px-24 items-center hover:bg-blue-100/40 transition-colors'):
         ui.label('Dịch Vụ Của Chúng Tôi').classes('text-primary font-bold text-sm uppercase tracking-[0.2em] mb-4')
         ui.label('Giải Pháp Cứu Hộ Toàn Diện').classes('text-4xl font-bold text-on-surface mb-16 font-outfit')
         
@@ -200,15 +206,47 @@ async def home_page():
         ui.separator()
         ui.label(f'© 2026 {APP_TITLE} (Version {APP_VERSION}). All rights reserved.').classes('w-full text-center mt-8 text-xs text-on-surface-variant')
 
-
+# Sửa lại phần hover cho card thay đổi màu bg thành blue và text giữ nguyên
 def _service_feature_card(title, icon, desc):
-    with ui.column().classes('m3-card p-8 w-72 h-80 gap-6 border-none hover:bg-primary group transition-all duration-500'):
-        with ui.element('div').classes('w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-[#f0f4f8]/20 transition-colors'):
-            ui.icon(icon, size='2.5rem').classes('text-primary group-hover:text-[#f0f4f8]')
-        
-        ui.label(title).classes('text-xl font-bold text-on-surface group-hover:text-[#f0f4f8] font-outfit')
-        ui.label(desc).classes('text-on-surface-variant group-hover:text-[#f0f4f8]/80 text-sm leading-relaxed')
+    with ui.column().classes('''
+        m3-card
+        p-8 w-72 h-80 gap-6
+        border-none
+        hover:bg-blue-50
+        hover:-translate-y-2
+        hover:shadow-xl
+        group 
+        transition-all duration-300
+    '''):
 
+        with ui.element('div').classes('''
+            w-16 h-16 rounded-2xl
+            bg-primary/10
+            flex items-center justify-center
+            group-hover:bg-primary/20
+            transition-colors duration-300
+        '''):
+
+            ui.icon(icon, size='2.5rem').classes('''
+                text-primary
+                group-hover:text-primary
+                transition-colors duration-300
+            ''')
+
+        ui.label(title).classes('''
+            text-xl font-bold
+            text-on-surface
+            group-hover:text-primary
+            font-outfit
+            transition-colors duration-300
+        ''')
+
+        ui.label(desc).classes('''
+            text-on-surface-variant
+            group-hover:text-on-surface
+            text-sm leading-relaxed
+            transition-colors duration-300
+        ''')
 
 def _stat_item(value, label):
     with ui.column().classes('items-center'):

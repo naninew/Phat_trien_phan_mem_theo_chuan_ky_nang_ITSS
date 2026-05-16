@@ -17,9 +17,9 @@ def page_layout(current_route: str = "", title: str = "Hệ thống cứu hộ")
     create_navbar(current_route)
     
     # 2. Main content container
-    with ui.column().classes("w-full min-h-screen bg-[#fdfbff]"):
+    with ui.column().classes("w-full min-h-screen flex flex-col bg-[#fdfbff]"):
         # Header / Hero area (optional decoration)
-        with ui.column().classes("w-full p-6 md:p-10 max-w-7xl mx-auto gap-6"):
+        with ui.column().classes("w-full md:p-10 max-w-7xl mx-auto "):
             # Breadcrumbs or simple title
             with ui.row().classes("items-center gap-2"):
                 ui.label(title).classes("text-3xl md:text-4xl font-bold text-[#001b3e] font-outfit tracking-tight")
