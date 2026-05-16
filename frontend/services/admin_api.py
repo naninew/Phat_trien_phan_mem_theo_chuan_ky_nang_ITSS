@@ -50,3 +50,39 @@ async def update_company_status(company_id: int, status: str) -> Dict[str, Any]:
 async def get_all_requests() -> List[Dict[str, Any]]:
     r = await api_client.get("/admin/requests")
     return r.get("data", [])
+
+
+async def get_chart_stats() -> Dict[str, Any]:
+    r = await api_client.get("/admin/stats/charts")
+    return r.get("data", {})
+
+
+async def get_export_data() -> List[Dict[str, Any]]:
+    r = await api_client.get("/admin/reports/export")
+    return r.get("data", [])
+
+
+async def get_reviews() -> List[Dict[str, Any]]:
+    r = await api_client.get("/admin/reviews")
+    return r.get("data", [])
+
+
+async def delete_review(review_id: int) -> bool:
+    try:
+        await api_client.delete(f"/admin/reviews/{review_id}")
+        return True
+    except Exception:
+        return False
+
+
+async def get_community_posts() -> List[Dict[str, Any]]:
+    r = await api_client.get("/admin/community/posts")
+    return r.get("data", [])
+
+
+async def delete_community_post(post_id: int) -> bool:
+    try:
+        await api_client.delete(f"/admin/community/posts/{post_id}")
+        return True
+    except Exception:
+        return False

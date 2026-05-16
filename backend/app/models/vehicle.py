@@ -16,13 +16,33 @@ class VehicleStatus(str, enum.Enum):
     MAINTENANCE = "maintenance"
 
 
+class Vehicle(Base):
+    """Vehicle table for storing customer's vehicles."""
+    
+    __tablename__ = "vehicles"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    license_plate = Column(String(20), unique=True, nullable=False, index=True)
+    brand = Column(String(50), nullable=False)
+    model = Column(String(50), nullable=False)
+    year = Column(Integer, nullable=False)
+    fuel_type = Column(String(20), nullable=False)  # Xăng/Dầu/Điện/Hybrid
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    customer = relationship("User", backref="vehicles")
+
+
 class RescueVehicle(Base):
     """Rescue vehicle table for storing company vehicles information."""
     
     __tablename__ = "rescue_vehicles"
     
     id = Column(Integer, primary_key=True, index=True)
-    license_plate = Column(String(20), nullable=False, index=True)
+    plate_number = Column(String(20), unique=True, nullable=False, index=True)
     vehicle_type = Column(String(50), nullable=False)  # e.g., "Xe cẩu", "Xe chở", "Xe kích bình"
     capacity = Column(String(50))  # Weight capacity or description
     status = Column(String(20), default="available")  # available, on_mission, maintenance
@@ -35,4 +55,4 @@ class RescueVehicle(Base):
     company = relationship("RescueCompany", back_populates="vehicles")
     
     def __repr__(self):
-        return f"<RescueVehicle(id={self.id}, plate='{self.license_plate}', type='{self.vehicle_type}')>"
+        return f"<RescueVehicle(id={self.id}, plate_number='{self.plate_number}', type='{self.vehicle_type}')>"

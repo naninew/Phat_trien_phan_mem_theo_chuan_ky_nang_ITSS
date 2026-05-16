@@ -3,14 +3,23 @@ Rescue routes – đầy đủ endpoints cho customer, company staff và admin.
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 
 from app.database import get_db
 from app.schemas.rescue import (
     RescueRequestCreate,
     RescueRequestUpdate,
     ServiceCreate,
-    VehicleCreate,
+    RescueVehicleCreate,
+    RescueStaffCreate,
+    RescueStaffUpdate,
+    ServiceAssignmentCreate,
+    PaymentCreate,
+    CustomerVehicleCreate,
+    CustomerVehicleUpdate,
+    CustomerVehicleResponse,
+    RescueCompanyCreate,
+    RescueStaffCreate,
 )
 from app.services import rescue_svc, auth_svc
 from app.utils.response import success_response
@@ -54,6 +63,22 @@ def create_service(
         message="Tạo dịch vụ thành công",
     )
 
+@router.put("/services/{service_id}")
+def update_service(
+    service_id: int,
+    service_data: dict,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    if current_user.get("role") not in ("company_staff", "admin"):
+        raise HTTPException(status_code=403, detail="Chỉ company staff mới có thể sửa dịch vụ")
+    company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
+    svc = rescue_svc.update_service(db, company.id, service_id, service_data)
+    if not svc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy dịch vụ")
+    return success_response(data={"id": svc.id, "service_name": svc.service_name}, message="Cập nhật thành công")
 
 @router.delete("/services/{service_id}")
 def delete_service(
@@ -71,6 +96,32 @@ def delete_service(
     return success_response(data={}, message="Đã xóa dịch vụ")
 
 
+@router.post("/company/profile")
+def create_company_profile(
+    profile_data: RescueCompanyCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    """Tạo profile công ty (chỉ cho role company_staff)."""
+    if current_user.get("role") != "company_staff":
+        raise HTTPException(status_code=403, detail="Chỉ tài khoản công ty mới có thể tạo profile")
+    
+    # Check if already has company
+    existing = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if existing:
+        raise HTTPException(status_code=400, detail="Tài khoản đã có profile công ty")
+    
+    company = rescue_svc.create_company_profile(db, current_user["user_id"], profile_data)
+    return success_response(
+        data={
+            "id": company.id,
+            "company_name": company.company_name,
+            "status": company.status
+        },
+        message="Đã tạo profile công ty, vui lòng chờ Admin xác minh"
+    )
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Nearby companies
 # ──────────────────────────────────────────────────────────────────────────────
@@ -78,18 +129,16 @@ def delete_service(
 def find_nearby_companies(
     latitude: float,
     longitude: float,
-    service_name: str,
+    service_ids: List[int] = Query(..., description="List of service IDs required"),
     radius_km: float = 50.0,
     db: Session = Depends(get_db),
 ):
-    """Tìm công ty cứu hộ gần vị trí người dùng, có dịch vụ khớp tên."""
-    results = rescue_svc.find_nearby_companies(db, latitude, longitude, service_name, radius_km)
+    """Tìm công ty cứu hộ gần vị trí người dùng, cung cấp đủ các dịch vụ yêu cầu."""
+    results = rescue_svc.find_nearby_companies(db, latitude, longitude, service_ids, radius_km)
 
     data = []
     for company, distance, services in results:
-        # Tìm dịch vụ cụ thể có tên khớp để lấy giá
-        matched = next((s for s in services if s.service_name.lower() == service_name.lower()), services[0] if services else None)
-        base_price = matched.base_price if matched else 0
+        base_price_total = sum(s.base_price for s in services)
         data.append({
             "id": company.id,
             "company_name": company.company_name,
@@ -98,7 +147,7 @@ def find_nearby_companies(
             "rating_avg": company.rating_avg,
             "rating_count": company.rating_count,
             "distance_km": round(distance, 2),
-            "estimated_price": rescue_svc.estimate_price(base_price, distance),
+            "estimated_price": rescue_svc.estimate_price(base_price_total, distance),
             "eta_minutes": rescue_svc.estimate_eta(distance),
             "service_radius_km": company.service_radius_km,
             "latitude": company.latitude,
@@ -124,15 +173,10 @@ def create_rescue_request(
     """Khách hàng gửi yêu cầu cứu hộ."""
     req = rescue_svc.create_rescue_request(db, current_user["user_id"], request_data)
 
-    from app.models.service import Service
-    service_obj = db.query(Service).filter(Service.id == req.service_id).first()
-
     return success_response(
         data={
             "id": req.id,
             "status": req.status,
-            "service_id": req.service_id,
-            "service_name": service_obj.service_name if service_obj else "N/A",
             "company_id": req.company_id,
             "address_description": req.address_description,
             "created_at": req.created_at.isoformat(),
@@ -153,20 +197,24 @@ def get_my_requests(
     requests = rescue_svc.get_user_requests(db, current_user["user_id"])
     data = []
     for r in requests:
-        svc = db.query(Service).filter(Service.id == r.service_id).first()
         company = db.query(RescueCompany).filter(RescueCompany.id == r.company_id).first() if r.company_id else None
+        services_data = []
+        for rs in r.request_services:
+            if rs.service:
+                services_data.append({"id": rs.service.id, "service_name": rs.service.service_name, "price": rs.unit_price})
+
         data.append({
             "id": r.id,
             "status": r.status,
-            "service_id": r.service_id,
-            "service_name": svc.service_name if svc else "N/A",
+            "services": services_data,
             "company_id": r.company_id,
             "company_name": company.company_name if company else None,
             "company_hotline": company.hotline if company else None,
             "address_description": r.address_description,
-            "car_issue_detail": r.car_issue_detail,
+            "incident_type": r.incident_type,
+            "description": r.description,
             "eta_minutes": r.eta_minutes,
-            "total_cost": r.total_cost,
+            "agreed_price": r.agreed_price,
             "payment_method": r.payment_method,
             "rating": r.rating,
             "feedback": r.feedback,
@@ -185,8 +233,9 @@ def get_request_detail(
     """Chi tiết một request."""
     from app.models.service import Service
     from app.models.company import RescueCompany
-    from app.models.vehicle import RescueVehicle
+    from app.models.vehicle import RescueVehicle, Vehicle
     from app.models.review import Review
+    from app.models.staff import RescueStaff
 
     req = rescue_svc.get_request_by_id(db, request_id)
     if not req:
@@ -202,34 +251,52 @@ def get_request_detail(
         if not company or req.company_id != company.id:
             raise HTTPException(status_code=403, detail="Không có quyền xem yêu cầu này")
 
-    svc = db.query(Service).filter(Service.id == req.service_id).first()
     company = db.query(RescueCompany).filter(RescueCompany.id == req.company_id).first() if req.company_id else None
-    vehicle = db.query(RescueVehicle).filter(RescueVehicle.id == req.vehicle_id).first() if req.vehicle_id else None
+    
+    # Xe của customer
+    customer_vehicle = db.query(Vehicle).filter(Vehicle.id == req.vehicle_id).first() if req.vehicle_id else None
+    
     review = db.query(Review).filter(Review.rescue_request_id == request_id).first()
+    
+    services_data = []
+    for rs in req.request_services:
+        if rs.service:
+            services_data.append({"id": rs.service.id, "service_name": rs.service.service_name, "price": rs.unit_price})
+
+    assignment_data = None
+    if req.assignment:
+        staff = db.query(RescueStaff).filter(RescueStaff.id == req.assignment.staff_id).first()
+        r_vehicle = db.query(RescueVehicle).filter(RescueVehicle.id == req.assignment.rescue_vehicle_id).first()
+        assignment_data = {
+            "staff_id": staff.id if staff else None,
+            "staff_name": staff.user.full_name if (staff and staff.user) else None,
+            "rescue_vehicle_id": r_vehicle.id if r_vehicle else None,
+            "rescue_vehicle_plate": r_vehicle.plate_number if r_vehicle else None,
+            "assigned_time": req.assignment.assigned_time.isoformat() if req.assignment.assigned_time else None
+        }
 
     return success_response(
         data={
             "id": req.id,
             "user_id": req.user_id,
             "status": req.status,
-            "service_id": req.service_id,
-            "service_name": svc.service_name if svc else "N/A",
+            "services": services_data,
             "company_id": req.company_id,
             "company_name": company.company_name if company else None,
             "company_hotline": company.hotline if company else None,
             "company_latitude": company.latitude if company else None,
             "company_longitude": company.longitude if company else None,
             "company_radius_km": company.service_radius_km if company else None,
-            "vehicle_id": req.vehicle_id,
-            "vehicle_plate": vehicle.license_plate if vehicle else None,
-            "vehicle_type": vehicle.vehicle_type if vehicle else None,
+            "customer_vehicle_id": req.vehicle_id,
+            "customer_vehicle_plate": customer_vehicle.license_plate if customer_vehicle else None,
             "latitude": req.latitude,
             "longitude": req.longitude,
             "address_description": req.address_description,
-            "car_issue_detail": req.car_issue_detail,
+            "incident_type": req.incident_type,
+            "description": req.description,
             "images": req.images or [],
             "eta_minutes": req.eta_minutes,
-            "total_cost": req.total_cost,
+            "agreed_price": req.agreed_price,
             "payment_method": req.payment_method,
             "payment_status": req.payment_status,
             "actual_arrival_time": req.actual_arrival_time.isoformat() if req.actual_arrival_time else None,
@@ -237,6 +304,7 @@ def get_request_detail(
             "has_review": review is not None,
             "rating": review.rating if review else None,
             "feedback": review.comment if review else None,
+            "assignment": assignment_data,
             "created_at": req.created_at.isoformat(),
             "updated_at": req.updated_at.isoformat(),
         },
@@ -309,33 +377,34 @@ def get_company_queue(
     data = []
     for r in requests:
         customer = db.query(User).filter(User.id == r.user_id).first()
-        svc = db.query(Service).filter(Service.id == r.service_id).first()
-        vehicle = db.query(RescueVehicle).filter(RescueVehicle.id == r.vehicle_id).first() if r.vehicle_id else None
+        services_data = []
+        for rs in r.request_services:
+            if rs.service:
+                services_data.append({"id": rs.service.id, "service_name": rs.service.service_name, "price": rs.unit_price})
+
         data.append({
             "id": r.id,
             "status": r.status,
             "customer_name": customer.full_name if customer else "N/A",
             "customer_phone": customer.phone if customer else "N/A",
-            "service_name": svc.service_name if svc else "N/A",
+            "services": services_data,
             "address_description": r.address_description,
-            "car_issue_detail": r.car_issue_detail,
+            "incident_type": r.incident_type,
+            "description": r.description,
             "latitude": r.latitude,
             "longitude": r.longitude,
             "eta_minutes": r.eta_minutes,
-            "total_cost": r.total_cost,
-            "vehicle_plate": vehicle.license_plate if vehicle else None,
+            "agreed_price": r.agreed_price,
             "payment_method": r.payment_method,
             "created_at": r.created_at.isoformat(),
         })
     return success_response(data=data, message="Success")
 
 
-@router.post("/requests/{request_id}/accept")
+@router.put("/requests/{request_id}/accept")
 def accept_request(
     request_id: int,
     eta_minutes: int,
-    vehicle_id: Optional[int] = None,
-    total_cost: Optional[float] = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(auth_svc.get_current_user_from_token),
 ):
@@ -347,18 +416,60 @@ def accept_request(
     if not company:
         raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
 
-    req = rescue_svc.accept_request(db, request_id, company.id, eta_minutes, vehicle_id)
+    req = rescue_svc.accept_request(db, request_id, company.id, eta_minutes)
     if not req:
         raise HTTPException(status_code=400, detail="Không thể tiếp nhận yêu cầu")
-
-    if total_cost:
-        req.total_cost = total_cost
-        db.commit()
-        db.refresh(req)
 
     return success_response(
         data={"id": req.id, "status": req.status, "eta_minutes": req.eta_minutes},
         message="Đã tiếp nhận yêu cầu",
+    )
+
+@router.put("/requests/{request_id}/reject")
+def reject_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    """Công ty từ chối yêu cầu cứu hộ."""
+    if current_user.get("role") not in ("company_staff", "admin"):
+        raise HTTPException(status_code=403, detail="Chỉ company staff mới có quyền từ chối")
+
+    company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
+
+    req = rescue_svc.reject_request(db, request_id, company.id)
+    if not req:
+        raise HTTPException(status_code=400, detail="Không thể từ chối yêu cầu")
+
+    return success_response(
+        data={"id": req.id, "status": req.status},
+        message="Đã từ chối yêu cầu",
+    )
+
+@router.post("/requests/{request_id}/assign")
+def assign_request(
+    request_id: int,
+    assignment_data: ServiceAssignmentCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    """Công ty phân công nhân viên và xe cho yêu cầu."""
+    if current_user.get("role") not in ("company_staff", "admin"):
+        raise HTTPException(status_code=403, detail="Chỉ company staff mới có quyền phân công")
+
+    company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
+
+    req = rescue_svc.assign_request(db, request_id, company.id, assignment_data)
+    if not req:
+        raise HTTPException(status_code=400, detail="Không thể phân công (yêu cầu chưa được accept hoặc không hợp lệ)")
+
+    return success_response(
+        data={"id": req.id, "status": req.status},
+        message="Đã phân công thành công",
     )
 
 
@@ -377,8 +488,8 @@ def update_request_status(
         db,
         request_id,
         status_update.status,
-        status_update.vehicle_id,
         status_update.eta_minutes,
+        status_update.agreed_price,
     )
     if not req:
         raise HTTPException(status_code=404, detail="Không tìm thấy yêu cầu")
@@ -386,6 +497,51 @@ def update_request_status(
     return success_response(
         data={"id": req.id, "status": req.status},
         message="Cập nhật trạng thái thành công",
+    )
+
+
+@router.post("/requests/{request_id}/complete")
+def complete_request(
+    request_id: int,
+    update_data: RescueRequestUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    """Công ty hoàn thành yêu cầu cứu hộ."""
+    if current_user.get("role") not in ("company_staff", "admin"):
+        raise HTTPException(status_code=403, detail="Không có quyền hoàn thành yêu cầu")
+
+    company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
+
+    req = rescue_svc.update_request_status(
+        db, request_id, "COMPLETED", agreed_price=update_data.agreed_price
+    )
+    if not req:
+        raise HTTPException(status_code=400, detail="Không thể hoàn thành yêu cầu")
+
+    return success_response(
+        data={"id": req.id, "status": req.status, "agreed_price": req.agreed_price},
+        message="Yêu cầu đã hoàn thành",
+    )
+
+
+@router.post("/requests/{request_id}/payment")
+def process_payment(
+    request_id: int,
+    payment_data: PaymentCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    """Khách hàng thanh toán sau khi dịch vụ hoàn thành."""
+    req = rescue_svc.process_payment(db, request_id, current_user["user_id"], payment_data)
+    if not req:
+        raise HTTPException(status_code=400, detail="Không thể thanh toán (chưa hoàn thành hoặc không hợp lệ)")
+    
+    return success_response(
+        data={"id": req.id, "payment_status": req.payment_status},
+        message="Thanh toán thành công",
     )
 
 
@@ -407,7 +563,7 @@ def get_my_vehicles(
         data=[
             {
                 "id": v.id,
-                "license_plate": v.license_plate,
+                "plate_number": v.plate_number,
                 "vehicle_type": v.vehicle_type,
                 "capacity": v.capacity,
                 "status": v.status,
@@ -417,10 +573,26 @@ def get_my_vehicles(
         message="Success",
     )
 
+@router.post("/staff")
+def add_staff(
+    staff_data: RescueStaffCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
+
+    staff = rescue_svc.create_staff(db, company.id, staff_data)
+    return success_response(
+        data={"id": staff.id, "skill_level": staff.skill_level},
+        message="Đã thêm nhân viên"
+    )
+
 
 @router.post("/vehicles")
 def add_vehicle(
-    vehicle_data: VehicleCreate,
+    vehicle_data: RescueVehicleCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(auth_svc.get_current_user_from_token),
 ):
@@ -430,7 +602,7 @@ def add_vehicle(
 
     vehicle = rescue_svc.create_vehicle(db, company.id, vehicle_data)
     return success_response(
-        data={"id": vehicle.id, "license_plate": vehicle.license_plate},
+        data={"id": vehicle.id, "plate_number": vehicle.plate_number},
         message="Đã thêm phương tiện",
     )
 
@@ -467,6 +639,137 @@ def delete_vehicle(
         raise HTTPException(status_code=400, detail="Không thể xóa xe (đang làm nhiệm vụ hoặc không tồn tại)")
     return success_response(data={}, message="Đã xóa phương tiện")
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Customer Vehicles – Personal cars
+# ──────────────────────────────────────────────────────────────────────────────
+@router.get("/customer/vehicles")
+def list_customer_vehicles(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    """Lấy danh sách xe cá nhân của khách hàng."""
+    vehicles = rescue_svc.get_customer_vehicles(db, current_user["user_id"])
+    return success_response(
+        data=[
+            {
+                "id": v.id,
+                "license_plate": v.license_plate,
+                "brand": v.brand,
+                "model": v.model,
+                "year": v.year,
+                "fuel_type": v.fuel_type,
+            }
+            for v in vehicles
+        ],
+        message="Success",
+    )
+
+
+@router.post("/customer/vehicles")
+def add_customer_vehicle(
+    vehicle_data: CustomerVehicleCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    """Thêm xe cá nhân mới."""
+    vehicle = rescue_svc.create_customer_vehicle(db, current_user["user_id"], vehicle_data)
+    return success_response(
+        data={"id": vehicle.id, "license_plate": vehicle.license_plate},
+        message="Đã thêm xe cá nhân",
+    )
+
+
+@router.put("/customer/vehicles/{vehicle_id}")
+def update_customer_vehicle(
+    vehicle_id: int,
+    vehicle_data: CustomerVehicleUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    """Cập nhật thông tin xe cá nhân."""
+    v = rescue_svc.update_customer_vehicle(db, current_user["user_id"], vehicle_id, vehicle_data)
+    if not v:
+        raise HTTPException(status_code=404, detail="Không tìm thấy xe cá nhân")
+    return success_response(data={"id": v.id}, message="Đã cập nhật thông tin xe")
+
+
+@router.delete("/customer/vehicles/{vehicle_id}")
+def delete_customer_vehicle(
+    vehicle_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    """Xóa xe cá nhân."""
+    ok = rescue_svc.delete_customer_vehicle(db, current_user["user_id"], vehicle_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Không tìm thấy xe để xóa")
+    return success_response(data={}, message="Đã xóa xe cá nhân")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Staff – Company staff
+# ──────────────────────────────────────────────────────────────────────────────
+@router.get("/staff")
+def list_company_staff(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
+    staff = rescue_svc.get_company_staff(db, company.id)
+    return success_response(
+        data=[
+            {
+                "id": s.id,
+                "skill_level": s.skill_level,
+                "status": s.status.value,
+            } for s in staff
+        ],
+        message="Success"
+    )
+
+@router.post("/staff")
+def add_company_staff(
+    staff_data: RescueStaffCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
+    staff = rescue_svc.create_staff(db, company.id, staff_data)
+    return success_response(data={"id": staff.id, "skill_level": staff.skill_level}, message="Đã thêm nhân viên")
+
+@router.put("/staff/{staff_id}")
+def update_company_staff(
+    staff_id: int,
+    staff_data: RescueStaffUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
+    staff = rescue_svc.update_staff(db, company.id, staff_id, staff_data)
+    if not staff:
+        raise HTTPException(status_code=404, detail="Không tìm thấy nhân viên")
+    return success_response(data={"id": staff.id, "status": staff.status.value}, message="Cập nhật thành công")
+
+@router.delete("/staff/{staff_id}")
+def delete_company_staff(
+    staff_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
+    ok = rescue_svc.delete_staff(db, company.id, staff_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Không tìm thấy nhân viên")
+    return success_response(data={}, message="Đã xóa nhân viên")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Company vehicles by ID (for admin/customer view)
@@ -513,31 +816,35 @@ def get_company_full_details(
     if not company:
         raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
 
-    # Reviews with Service Info
+    # Reviews
     reviews_data = []
-    reviews = db.query(Review, User, Service).join(
-        User, Review.user_id == User.id
-    ).join(
-        RescueRequest, Review.rescue_request_id == RescueRequest.id
-    ).join(
-        Service, RescueRequest.service_id == Service.id
-    ).filter(Review.company_id == company_id).order_by(Review.created_at.desc()).all()
+    reviews = db.query(Review).filter(Review.company_id == company_id).order_by(Review.created_at.desc()).all()
 
-    for rev, u, svc in reviews:
+    for rev in reviews:
         reviews_data.append({
-            "customer_name": u.full_name,
+            "customer_name": rev.user.full_name,
             "rating": rev.rating,
             "comment": rev.comment,
-            "service_name": svc.service_name,
             "created_at": rev.created_at.isoformat()
         })
     
     # My history with this company
     user_id = current_user["user_id"]
-    my_history = db.query(RescueRequest, Service).join(Service, RescueRequest.service_id == Service.id).filter(
+    my_history = db.query(RescueRequest).filter(
         RescueRequest.company_id == company_id,
         RescueRequest.user_id == user_id
     ).order_by(RescueRequest.created_at.desc()).all()
+
+    my_history_data = []
+    for req in my_history:
+        services_names = [rs.service.service_name for rs in req.request_services if rs.service]
+        my_history_data.append({
+            "id": req.id,
+            "services": services_names,
+            "total_cost": req.agreed_price or 0,
+            "created_at": req.created_at.isoformat(),
+            "status": req.status
+        })
 
     return success_response(
         data={
@@ -552,16 +859,7 @@ def get_company_full_details(
             "longitude": company.longitude,
             "service_radius_km": company.service_radius_km,
             "reviews": reviews_data,
-            "my_history": [
-                {
-                    "id": req.id,
-                    "service_name": svc.service_name,
-                    "total_cost": req.total_cost,
-                    "created_at": req.created_at.isoformat(),
-                    "status": req.status
-                }
-                for req, svc in my_history
-            ]
+            "my_history": my_history_data
         },
         message="Success"
     )

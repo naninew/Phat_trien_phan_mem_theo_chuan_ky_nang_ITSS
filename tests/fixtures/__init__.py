@@ -18,7 +18,7 @@ if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
 from app.database import Base, get_db
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, AccountStatus
 from app.models.company import RescueCompany
 from app.models.vehicle import RescueVehicle
 from app.models.service import Service
@@ -77,7 +77,7 @@ def test_admin(db_session: Session) -> User:
         phone="0900000001",
         email=f"admin_{suffix}@test.com",
         role=UserRole.ADMIN,
-        is_active=True
+        status=AccountStatus.ACTIVE
     )
     db_session.add(user)
     db_session.flush()
@@ -97,7 +97,7 @@ def test_customer(db_session: Session) -> User:
         phone="0900000002",
         email=f"customer_{suffix}@test.com",
         role=UserRole.CUSTOMER,
-        is_active=True
+        status=AccountStatus.ACTIVE
     )
     db_session.add(user)
     db_session.flush()
@@ -117,7 +117,7 @@ def test_company_staff(db_session: Session) -> User:
         phone="0900000003",
         email=f"staff_{suffix}@test.com",
         role=UserRole.COMPANY_STAFF,
-        is_active=True
+        status=AccountStatus.ACTIVE
     )
     db_session.add(user)
     db_session.flush()
@@ -134,7 +134,7 @@ def test_company(db_session: Session, test_company_staff: User) -> RescueCompany
         company_name=f"Test Rescue Co {suffix}",
         address="123 Test St, Hanoi",
         hotline="1900-1111",
-        license_number=f"TEST-{suffix}",
+        business_license=f"TEST-{suffix}",
         latitude=21.0285,
         longitude=105.8542,
         owner_id=test_company_staff.id,
@@ -169,7 +169,7 @@ def test_vehicle(db_session: Session, test_company: RescueCompany) -> RescueVehi
     import uuid
     suffix = str(uuid.uuid4())[:8]
     v = RescueVehicle(
-        license_plate=f"29A-{suffix}",
+        plate_number=f"29A-{suffix}",
         vehicle_type="Xe cẩu",
         capacity="2 tấn",
         company_id=test_company.id,
@@ -180,3 +180,17 @@ def test_vehicle(db_session: Session, test_company: RescueCompany) -> RescueVehi
     db_session.flush()
     db_session.refresh(v)
     return v
+
+@pytest.fixture
+def test_rescue_staff(db_session: Session, test_company: RescueCompany) -> RescueStaff:
+    """Create a test rescue staff record."""
+    from app.models.staff import RescueStaff, StaffStatus
+    staff = RescueStaff(
+        company_id=test_company.id,
+        skill_level="Expert",
+        status=StaffStatus.AVAILABLE
+    )
+    db_session.add(staff)
+    db_session.flush()
+    db_session.refresh(staff)
+    return staff

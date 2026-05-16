@@ -13,6 +13,7 @@ class UserRegister(BaseModel):
     full_name: str = Field(..., min_length=1, max_length=100)
     phone: str = Field(..., min_length=10, max_length=20)
     email: EmailStr
+    role: Optional[str] = "customer"
     
     @validator('phone')
     def validate_phone(cls, v):
@@ -62,7 +63,8 @@ class UserResponse(BaseModel):
     phone: str
     email: str
     role: str
-    is_active: bool
+    status: str
+    address: Optional[str] = None
     
     class Config:
         from_attributes = True

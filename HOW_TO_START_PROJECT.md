@@ -1,77 +1,99 @@
-# 🚀 Hướng dẫn Khởi động Dự án Roadside Assistance
+# 🚀 Hướng dẫn Khởi động Hệ thống Cứu hộ Xe (ITSS Roadside Assistance)
 
-Dự án này là hệ thống hỗ trợ cứu hộ xe trực tuyến, sử dụng **FastAPI** cho Backend và **NiceGUI** cho Frontend. Cơ sở dữ liệu mặc định là **SQLite**.
-
----
-
-## 1. Cài đặt Môi trường
-
-Bạn cần cài đặt các thư viện cần thiết cho cả 2 phần:
-
-### Backend:
-```bash
-cd backend
-pip install -r requirements.txt
-# Lưu ý: Nếu cài lỗi psycopg2-binary, bạn có thể bỏ qua vì dự án đang chạy SQLite.
-```
-
-### Frontend:
-```bash
-cd frontend
-pip install nicegui httpx python-dotenv
-```
+Tài liệu này hướng dẫn chi tiết cách thiết lập và chạy hệ thống từ lúc mới tải code về. Hệ thống bao gồm Backend (FastAPI) và Frontend (NiceGUI), sử dụng SQLite làm cơ sở dữ liệu mặc định.
 
 ---
 
-## 2. Khởi chạy Hệ thống (Theo thứ tự)
+## 📋 Điều kiện tiên quyết
+- **Python**: Phiên bản 3.9 trở lên (Khuyến nghị 3.10+).
+- **Trình duyệt**: Chrome, Edge hoặc Firefox bản mới nhất.
 
-### Bước 1: Khởi tạo dữ liệu (Nếu chưa có)
-Nếu bạn chưa có file `rescue_system.db` hoặc muốn reset lại toàn bộ data mới, hãy chạy lệnh sau để tạo hệ thống dữ liệu mẫu chuẩn (bao gồm user, công ty, dịch vụ ô tô/xe máy, yêu cầu cứu hộ, chat...):
+---
+
+## 🛠️ Bước 1: Tải mã nguồn và Cài đặt môi trường
+
+1. **Cài đặt thư viện cho Backend:**
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   ```
+
+2. **Cài đặt thư viện cho Frontend:**
+   ```bash
+   cd ../frontend
+   pip install -r requirements.txt
+   # Hoặc nếu không có file requirements:
+   pip install nicegui httpx python-dotenv plotly
+   ```
+
+---
+
+## 🗄️ Bước 2: Khởi tạo Cơ sở dữ liệu
+
+Dự án sử dụng SQLite để người mới không cần cài đặt SQL Server phức tạp. Để tạo database mẫu (Seed data):
+
 ```bash
 cd backend
 python generate_seed_data.py
 ```
-*(Lưu ý: Script này sẽ xóa toàn bộ dữ liệu cũ và tạo lại database từ đầu để đảm bảo tính đồng bộ).*
+*Lưu ý: Lệnh này sẽ tạo file `rescue_system.db`. Nếu bạn muốn làm sạch dữ liệu cũ, hãy xóa file .db này trước khi chạy.*
 
-### Bước 2: Chạy Backend Server
-Mở terminal 1:
+---
+
+## 🖥️ Bước 3: Khởi chạy Hệ thống
+
+Bạn cần mở 2 cửa sổ Terminal (hoặc CMD/PowerShell) riêng biệt:
+
+### Cửa sổ 1: Chạy Backend (API)
 ```bash
 cd backend
 python run.py
 ```
-*Server chạy tại: `http://localhost:8000`. Đừng đóng terminal này.*
+- API sẽ chạy tại: `http://localhost:8000`
+- Tài liệu API (Swagger UI): `http://localhost:8000/docs`
 
-### Bước 3: Chạy Frontend Server
-Mở terminal 2:
+### Cửa sổ 2: Chạy Frontend (WebApp)
 ```bash
 cd frontend
 python main.py
 ```
-*Giao diện chạy tại: `http://localhost:8080`.*
+- WebApp sẽ chạy tại: `http://localhost:8080` (Mặc định tự động mở trình duyệt).
 
 ---
 
-## 3. Thông tin Tài khoản Test
+## 👤 Thông tin Tài khoản Thử nghiệm
 
-Dưới đây là các tài khoản đã được nạp sẵn vào hệ thống sau khi chạy file gen data:
+Hệ thống đã nạp sẵn các tài khoản sau (Mật khẩu mặc định: `Pass123!`, riêng Admin là `Admin123!`):
 
-| Vai trò | Username | Password | Chức năng chính |
-| :--- | :--- | :--- | :--- |
-| **Quản trị viên** | `admin` | `Admin123!` | Quản lý toàn bộ hệ thống, xem chat & thanh toán |
-| **Khách hàng 1-5** | `customer1` -> `customer5` | `Pass123!` | Gửi yêu cầu, Chat, Thanh toán, Sửa Profile |
-| **Công ty 1-5** | `company1` -> `company5` | `Pass123!` | Tiếp nhận yêu cầu, Quản lý xe/dịch vụ, Chat |
+| Vai trò | Username | Chức năng chính |
+| :--- | :--- | :--- |
+| **Quản trị viên** | `admin` | Quản lý toàn sàn, duyệt công ty, xem báo cáo doanh thu. |
+| **Khách hàng** | `customer1` -> `customer5` | Đặt cứu hộ, quản lý xe cá nhân, chat với công ty. |
+| **Công ty** | `company1` -> `company5` | Quản lý đội xe, nhân viên, tiếp nhận và xử lý sự cố. |
+
+---
+
+## 🧪 Bước 4: Chạy Kiểm thử (Automation Testing)
+
+Để đảm bảo hệ thống hoạt động ổn định sau khi cài đặt, bạn có thể chạy bộ test tự động:
+
+1. **Kiểm tra tính năng Admin:**
+   ```bash
+   python -m pytest tests/test_sprint8_admin.py -v
+   ```
+
+2. **Kiểm tra luồng nghiệp vụ toàn trình (End-to-End):**
+   ```bash
+   python -m pytest tests/test_e2e_flow.py -v
+   ```
 
 ---
 
-## 4. Quy trình Kiểm thử Nhanh (Demo Flow)
+## ❓ Xử lý sự cố thường gặp
 
-1.  **Đăng nhập Khách hàng** (`customer1`): Vào mục **Tìm Cứu Hộ** -> Chọn loại dịch vụ -> Chọn Công ty Thăng Long -> Gửi yêu cầu.
-2.  **Đăng nhập Công ty** (`company1`): Vào mục **Hàng Đợi** -> Sẽ thấy yêu cầu mới -> Nhấn **Tiếp nhận** -> Chọn xe cứu hộ.
-3.  **Cập nhật trạng thái**: Tại giao diện Công ty, cập nhật yêu cầu sang "Hoàn thành".
-4.  **Kiểm tra Admin**: Đăng nhập `admin` để thấy các con số thống kê thay đổi trên Dashboard.
+- **Lỗi `ModuleNotFoundError: No module named 'app'`**: Đảm bảo bạn đang chạy lệnh từ thư mục gốc hoặc đã thực hiện `sys.path` đúng như hướng dẫn trong các file test.
+- **Cổng 8000 hoặc 8080 đã bị chiếm dụng**: Kiểm tra xem có ứng dụng nào khác đang chạy trên các cổng này không và tắt chúng đi.
+- **Lỗi Cơ sở dữ liệu**: Nếu gặp lỗi `IntegrityError`, hãy xóa file `rescue_system.db` và chạy lại `generate_seed_data.py`.
 
 ---
-**Lưu ý quan trọng**: 
-- Luôn chạy Backend trước khi mở Frontend.
-- Các file ảnh tải lên sẽ được lưu trong thư mục `backend/uploads/`.
-- File database là `backend/rescue_system.db`.
+*Chúc bạn có trải nghiệm tốt với hệ thống ITSS Roadside Assistance!*

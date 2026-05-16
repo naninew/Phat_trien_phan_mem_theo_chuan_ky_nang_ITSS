@@ -57,7 +57,7 @@ def init_db() -> None:
     Run once on startup; existing tables are NOT dropped.
     """
     # Import all models so metadata is populated before create_all
-    from app.models import user, company, service, vehicle, request, review, payment, community  # noqa: F401
+    from app.models import user, company, service, vehicle, staff, request, review, payment, community, communication, report  # noqa: F401
     Base.metadata.create_all(bind=engine)
     print(f"[DB] Connected to: {DATABASE_URL[:50]}...")
     print("[DB] Tables created/verified.")

@@ -17,7 +17,8 @@ class RescueCompany(Base):
     company_name = Column(String(200), nullable=False)
     address = Column(Text, nullable=False)
     hotline = Column(String(20), nullable=False)
-    license_number = Column(String(50), unique=True, nullable=False)
+    business_license = Column(String(50), unique=True, nullable=False)
+    operating_area = Column(String(200), nullable=True)
     description = Column(Text, nullable=True)
 
     # ── Vị trí công ty (cần để tính khoảng cách Haversine) ──────────────────

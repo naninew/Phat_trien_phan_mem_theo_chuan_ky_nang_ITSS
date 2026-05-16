@@ -1,5 +1,5 @@
 """
-RescueRequest model for managing rescue service requests.
+RescueRequest model for managing rescue service requests, services, and assignments.
 """
 from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
@@ -11,12 +11,14 @@ from app.database import Base
 
 class RequestStatus(str, enum.Enum):
     """Rescue request status enumeration."""
-    PENDING = "pending"  # Chờ tiếp nhận
-    ACCEPTED = "accepted"  # Đã tiếp nhận
-    EN_ROUTE = "en_route"  # Đang di chuyển
-    ON_SITE = "on_site"  # Đang xử lý
-    COMPLETED = "completed"  # Hoàn thành
-    CANCELLED = "cancelled"  # Đã hủy
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    ASSIGNED = "ASSIGNED"
+    ON_THE_WAY = "ON_THE_WAY"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    REJECTED = "REJECTED"
+    CANCELLED = "CANCELLED"
 
 
 class RescueRequest(Base):
@@ -27,8 +29,7 @@ class RescueRequest(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     company_id = Column(Integer, ForeignKey("rescue_companies.id"), nullable=True)
-    service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
-    vehicle_id = Column(Integer, ForeignKey("rescue_vehicles.id"), nullable=True)
+    vehicle_id = Column(Integer, ForeignKey("vehicles.id"), nullable=False) # Refers to customer's vehicle
     
     # Location information
     latitude = Column(Float, nullable=False)
@@ -36,17 +37,18 @@ class RescueRequest(Base):
     address_description = Column(Text, nullable=False)
     
     # Issue details
-    car_issue_detail = Column(Text, nullable=False)
+    incident_type = Column(String(100), nullable=False)
+    description = Column(Text, nullable=False)
     images = Column(JSON)  # List of image URLs
     
     # Status and tracking
-    status = Column(String(20), default="pending")
+    status = Column(String(20), default="PENDING")
     eta_minutes = Column(Integer)  # Estimated time of arrival in minutes
     actual_arrival_time = Column(DateTime)
     actual_completion_time = Column(DateTime)
     
     # Payment
-    total_cost = Column(Float)
+    agreed_price = Column(Float)
     payment_status = Column(String(20), default="unpaid")  # unpaid, paid, refunded
     payment_method = Column(String(50))  # cash, momo, vnpay, card
     
@@ -60,10 +62,42 @@ class RescueRequest(Base):
     # Relationships
     user = relationship("User", back_populates="rescue_requests", foreign_keys=[user_id])
     company = relationship("RescueCompany", back_populates="rescue_requests")
-    service = relationship("Service", back_populates="rescue_requests")
-    vehicle = relationship("RescueVehicle")
+    vehicle = relationship("Vehicle")
     payment = relationship("Payment", back_populates="rescue_request", uselist=False)
     review = relationship("Review", back_populates="rescue_request", uselist=False)
     
+    request_services = relationship("RequestService", back_populates="request", cascade="all, delete-orphan")
+    assignment = relationship("ServiceAssignment", back_populates="request", uselist=False, cascade="all, delete-orphan")
+    
     def __repr__(self):
         return f"<RescueRequest(id={self.id}, user_id={self.user_id}, status='{self.status}')>"
+
+
+class RequestService(Base):
+    """Association table for many-to-many relationship between RescueRequest and Service."""
+    __tablename__ = "request_services"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    request_id = Column(Integer, ForeignKey("rescue_requests.id"), nullable=False)
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
+    quantity = Column(Integer, default=1)
+    unit_price = Column(Float, nullable=False)
+    
+    request = relationship("RescueRequest", back_populates="request_services")
+    service = relationship("Service")
+
+
+class ServiceAssignment(Base):
+    """Assignment table linking a request to specific staff and vehicle."""
+    __tablename__ = "service_assignments"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    request_id = Column(Integer, ForeignKey("rescue_requests.id"), nullable=False, unique=True)
+    staff_id = Column(Integer, ForeignKey("rescue_staff.id"), nullable=False)
+    rescue_vehicle_id = Column(Integer, ForeignKey("rescue_vehicles.id"), nullable=False)
+    assigned_time = Column(DateTime, default=datetime.utcnow)
+    notes = Column(Text)
+    
+    request = relationship("RescueRequest", back_populates="assignment")
+    staff = relationship("RescueStaff")
+    rescue_vehicle = relationship("RescueVehicle")

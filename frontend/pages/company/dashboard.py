@@ -1,105 +1,116 @@
 """
-Trang Dashboard dành cho công ty cứu hộ.
+Company Dashboard - NiceGUI
 """
 from nicegui import ui
-from typing import Optional, Dict, Any, List
-
-from core.auth import require_role, get_user_name
+from typing import Dict, Any, List
+from core.auth import require_role
 from components.page_layout import page_layout
-from services.rescue_api import get_company_queue
-
+from services.rescue_api import get_company_queue, get_my_vehicles, get_company_staff
 
 def create_company_dashboard():
+    """Register /company/dashboard route."""
 
     @ui.page('/company/dashboard')
-    async def company_dashboard():
+    async def dashboard_page():
         if not require_role("company_staff"):
             return
 
-        with page_layout("/company/dashboard", title="Dashboard Công Ty"):
-            name = get_user_name()
+        with page_layout("/company/dashboard", title="Bảng Điều Khiển Công Ty"):
             
-            # Header section
-            with ui.card().classes("w-full rounded-3xl bg-gradient-to-r from-slate-800 to-slate-900 text-white p-8 shadow-xl border-none"):
-                with ui.row().classes("w-full justify-between items-center"):
-                    with ui.column().classes("gap-1"):
-                        ui.label(f"Xin chào, {name}!").classes("text-3xl font-bold")
-                        ui.label("Hệ thống quản lý cứu hộ chuyên nghiệp").classes("text-slate-400")
-                    
-                    with ui.row().classes("gap-4"):
-                        ui.button("XEM HÀNG ĐỢI", icon="list_alt", on_click=lambda: ui.navigate.to("/company/queue")).classes("bg-indigo-600 rounded-xl font-bold px-6 py-2 shadow-lg shadow-indigo-500/20")
-                        ui.button("QUẢN LÝ ĐỘI XE", icon="local_shipping", on_click=lambda: ui.navigate.to("/company/fleet")).classes("bg-slate-700 rounded-xl font-bold px-6 py-2")
-
-            # Thống kê nhanh
-            ui.label("Tổng quan trong ngày").classes("text-xl font-bold text-gray-700 mt-4 ml-2")
-            stats_row = ui.row().classes("w-full gap-4")
-            with stats_row:
-                pending_card = _stat_card("Chờ Tiếp Nhận", "...", "hourglass_empty", "amber")
-                active_card  = _stat_card("Đang Thực Hiện", "...", "local_shipping", "indigo")
-                done_card    = _stat_card("Đã Hoàn Thành", "...", "task_alt", "green")
-
-            # Quick Actions & Recent
-            with ui.row().classes("w-full gap-6 mt-2 items-start"):
-                # Left column: Recent Requests
-                with ui.column().classes("flex-1 gap-4"):
-                    with ui.card().classes("w-full rounded-2xl p-6 shadow-sm border border-gray-100"):
-                        with ui.row().classes("w-full justify-between items-center mb-4"):
-                            ui.label("Yêu cầu mới nhất").classes("text-lg font-bold text-gray-700")
-                            ui.button("Chi tiết", on_click=lambda: ui.navigate.to("/company/queue")).props("flat color=indigo dense")
-                        
-                        recent_container = ui.column().classes("w-full gap-3")
-
-                # Right column: Quick info
-                with ui.column().classes("w-[350px] gap-6"):
-                    with ui.card().classes("w-full rounded-2xl p-6 shadow-sm border border-gray-100 bg-indigo-50/20"):
-                        ui.label("Mẹo nhanh").classes("font-bold text-indigo-900 mb-2")
-                        ui.label("Luôn cập nhật trạng thái 'Đang di chuyển' để khách hàng có thể theo dõi vị trí của bạn.").classes("text-xs text-indigo-700 leading-relaxed")
-
-        # ── Logic ────────────────────────────────────────────────────────
-        
-        async def _load_stats():
-            try:
-                queue = await get_company_queue()
-                
-                pending = sum(1 for r in queue if r['status'] == 'pending')
-                active  = sum(1 for r in queue if r['status'] in ('accepted', 'en_route', 'on_site'))
-                done    = sum(1 for r in queue if r['status'] == 'completed')
-
-                pending_card.clear()
-                with pending_card: _stat_card("Chờ Tiếp Nhận", str(pending), "hourglass_empty", "amber")
-                
-                active_card.clear()
-                with active_card: _stat_card("Đang Thực Hiện", str(active), "local_shipping", "indigo")
-                
-                done_card.clear()
-                with done_card: _stat_card("Đã Hoàn Thành", str(done), "task_alt", "green")
-
-                # Recent requests
-                recent_container.clear()
-                with recent_container:
-                    if not queue:
-                        ui.label("Không có hoạt động nào gần đây").classes("text-gray-400 italic text-sm py-4")
-                    else:
-                        for r in queue[:5]:
-                            _render_simple_row(r)
-            except Exception as e:
-                ui.notify(f"Lỗi tải dữ liệu: {e}", type="negative")
-
-        def _render_simple_row(r):
-            with ui.row().classes("w-full items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100"):
+            with ui.row().classes("w-full items-center justify-between mb-8"):
                 with ui.column().classes("gap-0"):
-                    ui.label(r.get('service_name', 'Cứu hộ')).classes("font-semibold text-sm")
-                    ui.label(f"#{r['id']} - {r.get('customer_name', 'Khách hàng')}").classes("text-[10px] text-gray-400")
+                    ui.label("🚀 Trung Tâm Điều Hành").classes("text-4xl font-bold font-outfit text-primary")
+                    ui.label("Tổng quan hoạt động và điều phối cứu hộ").classes("text-on-surface-variant opacity-70")
                 
-                ui.button(icon="chevron_right", on_click=lambda: ui.navigate.to("/company/queue")).props("flat round dense")
+                ui.button("ĐIỀU PHỐI NGAY", icon="bolt", on_click=lambda: ui.navigate.to("/company/queue")) \
+                    .classes("bg-primary text-white px-8 py-4 rounded-2xl shadow-xl shadow-primary/30 font-bold")
 
-        await _load_stats()
-        ui.timer(30, _load_stats)
+            # --- KPI Cards ---
+            with ui.row().classes("w-full gap-6 mb-10"):
+                card_pending = _kpi_card("Đang Chờ", "0", "pending", "bg-amber-100 text-amber-700")
+                card_active = _kpi_card("Đang Xử Lý", "0", "local_shipping", "bg-indigo-100 text-indigo-700")
+                card_completed = _kpi_card("Hoàn Thành", "0", "task_alt", "bg-green-100 text-green-700")
+                card_resources = _kpi_card("Tài Nguyên", "0/0", "group", "bg-purple-100 text-purple-700")
 
+            with ui.row().classes("w-full gap-8 items-start"):
+                # Left: Live Queue
+                with ui.column().classes("flex-1 gap-6"):
+                    ui.label("Dòng Yêu Cầu Mới").classes("text-xl font-bold font-outfit mb-2")
+                    queue_container = ui.column().classes("w-full gap-4")
 
-def _stat_card(title, value, icon, color):
-    with ui.card().classes(f"flex-1 rounded-2xl p-6 shadow-sm border border-{color}-100 bg-white items-center gap-2") as card:
-        ui.icon(icon, size="2.5rem", color=color)
-        ui.label(value).classes(f"text-3xl font-bold text-{color}-600")
-        ui.label(title).classes("text-sm text-gray-500 font-medium")
-    return card
+                # Right: Resource Status
+                with ui.column().classes("w-96 gap-6"):
+                    with ui.card().classes("w-full rounded-3xl p-6 border border-surface-variant/30 shadow-sm"):
+                        ui.label("Trạng Thái Đội Xe").classes("text-lg font-bold mb-4 font-outfit")
+                        vehicle_status_list = ui.column().classes("w-full gap-3")
+                    
+                    with ui.card().classes("w-full rounded-3xl p-6 border border-surface-variant/30 shadow-sm"):
+                        ui.label("Trạng Thái Nhân Sự").classes("text-lg font-bold mb-4 font-outfit")
+                        staff_status_list = ui.column().classes("w-full gap-3")
+
+            # --- Logic ---
+            async def refresh_dashboard():
+                try:
+                    # 1. Fetch Queue
+                    q = await get_company_queue()
+                    # Cập nhật status sang CHỮ HOA theo RequestStatus model
+                    pending = [r for r in q if r['status'] == 'PENDING']
+                    active = [r for r in q if r['status'] in ('ACCEPTED', 'ASSIGNED', 'ON_THE_WAY', 'IN_PROGRESS')]
+                    completed = [r for r in q if r['status'] == 'COMPLETED']
+                    
+                    card_pending.content_label.set_text(str(len(pending)))
+                    card_active.content_label.set_text(str(len(active)))
+                    card_completed.content_label.set_text(str(len(completed)))
+                    
+                    # Render Queue Preview
+                    queue_container.clear()
+                    with queue_container:
+                        if not pending:
+                            ui.label("Không có yêu cầu mới.").classes("italic opacity-50 py-4")
+                        for r in pending[:3]:
+                            with ui.card().classes("w-full rounded-2xl p-4 border border-amber-200 bg-amber-50/30 hover:shadow-md transition-all cursor-pointer") \
+                                .on('click', lambda: ui.navigate.to("/company/queue")):
+                                with ui.row().classes("w-full items-center justify-between"):
+                                    ui.label(r.get('service_name', 'Cứu hộ')).classes("font-bold text-lg")
+                                    ui.label(r['created_at'][:16]).classes("text-xs opacity-50")
+                                ui.label(r.get('address_description', 'N/A')).classes("text-xs opacity-70 truncate")
+
+                    # 2. Fetch Resources
+                    vs = await get_my_vehicles()
+                    ss = await get_company_staff()
+                    
+                    v_avail = len([v for v in vs if v['status'] == 'available'])
+                    s_avail = len([s for s in ss if s['status'] == 'AVAILABLE'])
+                    card_resources.content_label.set_text(f"{s_avail}/{len(ss)} NV | {v_avail}/{len(vs)} Xe")
+
+                    # Render Resource Status
+                    vehicle_status_list.clear()
+                    with vehicle_status_list:
+                        for v in vs[:5]:
+                            with ui.row().classes("w-full justify-between items-center"):
+                                ui.label(v.get('license_plate') or v.get('plate_number', 'N/A')).classes("text-sm font-medium")
+                                dot_color = "bg-green-500" if v['status'] == 'available' else "bg-amber-500"
+                                ui.element('div').classes(f"w-2 h-2 rounded-full {dot_color}")
+
+                    staff_status_list.clear()
+                    with staff_status_list:
+                        for s in ss[:5]:
+                            with ui.row().classes("w-full justify-between items-center"):
+                                ui.label(f"Nhân viên #{s['id']}").classes("text-sm font-medium")
+                                dot_color = "bg-green-500" if s['status'] == 'AVAILABLE' else "bg-amber-500"
+                                ui.element('div').classes(f"w-2 h-2 rounded-full {dot_color}")
+                except Exception as e:
+                    print(f"Dashboard refresh error: {e}")
+
+            ui.timer(15, refresh_dashboard)
+            await refresh_dashboard()
+
+    def _kpi_card(title, value, icon, style):
+        with ui.card().classes(f"flex-1 rounded-3xl p-6 border border-surface-variant/30 shadow-sm") as card:
+            with ui.row().classes("w-full items-center gap-4"):
+                with ui.element('div').classes(f"p-4 rounded-2xl {style}"):
+                    ui.icon(icon, size="2rem")
+                with ui.column().classes("gap-0"):
+                    ui.label(title).classes("text-xs opacity-50 font-bold uppercase")
+                    card.content_label = ui.label(value).classes("text-2xl font-bold font-outfit")
+        return card

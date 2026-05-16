@@ -28,20 +28,24 @@ async def find_nearby_companies(
 # ── Requests – Customer ───────────────────────────────────────────────────────
 async def create_rescue_request(
     service_id: int,
+    vehicle_id: int,
     latitude: float,
     longitude: float,
     address_description: str,
-    car_issue_detail: str,
+    incident_type: str,
+    description: str,
     company_id: Optional[int] = None,
     payment_method: str = "cash",
     images: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     payload = {
-        "service_id": service_id,
+        "service_ids": [service_id],
+        "vehicle_id": vehicle_id,
         "latitude": latitude,
         "longitude": longitude,
         "address_description": address_description,
-        "car_issue_detail": car_issue_detail,
+        "incident_type": incident_type,
+        "description": description,
         "payment_method": payment_method,
     }
     if company_id:
@@ -91,14 +95,27 @@ async def accept_request(
     request_id: int,
     eta_minutes: int,
     vehicle_id: Optional[int] = None,
+    staff_id: Optional[int] = None,
     total_cost: Optional[float] = None,
 ) -> Dict[str, Any]:
     params: Dict[str, Any] = {"eta_minutes": eta_minutes}
     if vehicle_id:
         params["vehicle_id"] = vehicle_id
+    if staff_id:
+        params["staff_id"] = staff_id
     if total_cost:
         params["total_cost"] = total_cost
-    r = await api_client.post(f"/rescue/requests/{request_id}/accept", params=params)
+        
+    r = await api_client.put(f"/rescue/requests/{request_id}/accept", params=params)
+    return r.get("data", {})
+
+
+async def assign_request(request_id: int, staff_id: int, vehicle_id: int) -> Dict[str, Any]:
+    payload = {
+        "staff_id": staff_id,
+        "rescue_vehicle_id": vehicle_id
+    }
+    r = await api_client.post(f"/rescue/requests/{request_id}/assign", data=payload)
     return r.get("data", {})
 
 
@@ -142,6 +159,84 @@ async def delete_vehicle(vehicle_id: int) -> bool:
         return True
     except Exception:
         return False
+
+# ── Customer Vehicles – Personal cars ─────────────────────────────────────────
+async def get_customer_vehicles() -> List[Dict[str, Any]]:
+    r = await api_client.get("/rescue/customer/vehicles")
+    return r.get("data", [])
+
+
+async def add_customer_vehicle(data: Dict[str, Any]) -> Dict[str, Any]:
+    r = await api_client.post("/rescue/customer/vehicles", data=data)
+    return r.get("data", {})
+
+
+async def update_customer_vehicle(vehicle_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
+    r = await api_client.put(f"/rescue/customer/vehicles/{vehicle_id}", data=data)
+    return r.get("data", {})
+
+
+async def delete_customer_vehicle(vehicle_id: int) -> bool:
+    try:
+        r = await api_client.delete(f"/rescue/customer/vehicles/{vehicle_id}")
+        return r.get("success", False)
+    except Exception:
+        return False
+
+
+# ── Company Staff & Resources ────────────────────────────────────────────────
+async def get_company_staff() -> List[Dict[str, Any]]:
+    r = await api_client.get("/rescue/staff")
+    return r.get("data", [])
+
+async def add_company_staff(skill_level: str) -> Dict[str, Any]:
+    payload = {"skill_level": skill_level}
+    r = await api_client.post("/rescue/staff", data=payload)
+    return r.get("data", {})
+
+async def update_company_staff(staff_id: int, skill_level: Optional[str] = None, status: Optional[str] = None) -> bool:
+    payload = {}
+    if skill_level: payload["skill_level"] = skill_level
+    if status: payload["status"] = status
+    r = await api_client.put(f"/rescue/staff/{staff_id}", data=payload)
+    return r.get("success", False)
+
+async def delete_company_staff(staff_id: int) -> bool:
+    r = await api_client.delete(f"/rescue/staff/{staff_id}")
+    return r.get("success", False)
+
+async def get_company_services() -> List[Dict[str, Any]]:
+    # Note: Backend might need a specific endpoint for company's own services with prices
+    # For now, we list services then filter or use a more specific endpoint if exists.
+    # Let's check backend/app/routes/rescue_routes.py:43 (create_service)
+    # Actually, companies usually need to see their OWN services with prices.
+    # Let's assume there's a list_company_services endpoint or we use get_company_full_details
+    r = await api_client.get("/profile/company")
+    return r.get("data", {}).get("services", [])
+
+async def add_company_service(service_name: str, base_price: float) -> Dict[str, Any]:
+    payload = {"service_name": service_name, "base_price": base_price}
+    r = await api_client.post("/rescue/services", data=payload)
+    return r.get("data", {})
+
+async def update_company_service(service_id: int, base_price: float, is_active: bool = True) -> bool:
+    payload = {"base_price": base_price, "is_active": is_active}
+    r = await api_client.put(f"/rescue/services/{service_id}", data=payload)
+    return r.get("success", False)
+
+async def delete_company_service(service_id: int) -> bool:
+    r = await api_client.delete(f"/rescue/services/{service_id}")
+    return r.get("success", False)
+
+async def get_company_reviews() -> List[Dict[str, Any]]:
+    # Using the existing full-details endpoint but extracting reviews
+    r = await api_client.get("/profile/company")
+    return r.get("data", {}).get("reviews", [])
+
+async def reject_request(request_id: int) -> bool:
+    r = await api_client.put(f"/rescue/requests/{request_id}/reject")
+    return r.get("success", False)
+
 
 # ── Chat & Communication ───────────────────────────────────────────────────
 async def get_chat_messages(request_id: int) -> List[Dict[str, Any]]:

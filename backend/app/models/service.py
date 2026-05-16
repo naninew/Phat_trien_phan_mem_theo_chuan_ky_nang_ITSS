@@ -16,6 +16,7 @@ class Service(Base):
     id = Column(Integer, primary_key=True, index=True)
     service_name = Column(String(100), nullable=False)  # e.g., "Vá lốp", "Kéo xe", "Kích bình"
     base_price = Column(Float, nullable=False)
+    estimated_duration = Column(Integer, nullable=False, default=30)  # minutes
     description = Column(Text)
     company_id = Column(Integer, ForeignKey("rescue_companies.id"), nullable=False)
     is_active = Column(Boolean, default=True)
@@ -24,7 +25,6 @@ class Service(Base):
     
     # Relationships
     company = relationship("RescueCompany", back_populates="services")
-    rescue_requests = relationship("RescueRequest", back_populates="service")
     
     def __repr__(self):
         return f"<Service(id={self.id}, name='{self.service_name}', price={self.base_price})>"

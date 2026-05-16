@@ -14,11 +14,13 @@ from app.services import auth_svc, rescue_svc
 from app.utils.response import success_response, error_response
 from app.utils.jwt_helper import get_current_user_from_token
 from pydantic import BaseModel
+from app.schemas.rescue import CustomerVehicleCreate, CustomerVehicleUpdate, CustomerVehicleResponse
 
 class UserProfileUpdate(BaseModel):
     full_name: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
+    address: Optional[str] = None
 
 class CompanyProfileUpdate(BaseModel):
     company_name: Optional[str] = None
@@ -95,7 +97,7 @@ def get_my_profile(
                 "company_name": company.company_name,
                 "address": company.address,
                 "hotline": company.hotline,
-                "license_number": company.license_number,
+                "business_license": company.business_license,
                 "is_verified": company.is_verified,
                 "status": company.status,
                 "service_radius_km": company.service_radius_km,
@@ -109,6 +111,8 @@ def get_my_profile(
             "phone": user.phone,
             "email": user.email,
             "role": user.role.value,
+            "status": user.status.value,
+            "address": user.address,
             "avatar_url": getattr(user, 'avatar_url', None),
             "company": company_info,
             "created_at": user.created_at.isoformat(),
@@ -149,6 +153,8 @@ def update_my_profile(
                 detail="Email already registered"
             )
         user.email = profile_data.email
+    if profile_data.address is not None:
+        user.address = profile_data.address
     
     db.commit()
     db.refresh(user)
@@ -160,6 +166,7 @@ def update_my_profile(
             "full_name": user.full_name,
             "phone": user.phone,
             "email": user.email,
+            "address": user.address,
         },
         message="Profile updated successfully"
     )
@@ -269,6 +276,78 @@ def update_company_profile(
         message="Company profile updated successfully"
     )
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Customer Vehicles
+# ──────────────────────────────────────────────────────────────────────────────
+@router.get("/vehicles", response_model=dict)
+def list_my_vehicles(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_from_token),
+):
+    """Get list of customer's vehicles."""
+    vehicles = rescue_svc.get_customer_vehicles(db, current_user["user_id"])
+    return success_response(
+        data=[
+            {
+                "id": v.id,
+                "license_plate": v.license_plate,
+                "brand": v.brand,
+                "model": v.model,
+                "year": v.year,
+                "fuel_type": v.fuel_type,
+            } for v in vehicles
+        ],
+        message="Success"
+    )
+
+@router.post("/vehicles", response_model=dict)
+def create_my_vehicle(
+    vehicle_data: CustomerVehicleCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_from_token),
+):
+    """Add a new vehicle for customer."""
+    v = rescue_svc.create_customer_vehicle(db, current_user["user_id"], vehicle_data)
+    return success_response(
+        data={
+            "id": v.id,
+            "license_plate": v.license_plate,
+            "brand": v.brand,
+            "model": v.model,
+        },
+        message="Vehicle added successfully"
+    )
+
+@router.put("/vehicles/{vehicle_id}", response_model=dict)
+def update_my_vehicle(
+    vehicle_id: int,
+    vehicle_data: CustomerVehicleUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_from_token),
+):
+    """Update customer vehicle."""
+    v = rescue_svc.update_customer_vehicle(db, current_user["user_id"], vehicle_id, vehicle_data)
+    if not v:
+        raise HTTPException(status_code=404, detail="Vehicle not found or not owned by you")
+    return success_response(
+        data={
+            "id": v.id,
+            "license_plate": v.license_plate,
+        },
+        message="Vehicle updated successfully"
+    )
+
+@router.delete("/vehicles/{vehicle_id}", response_model=dict)
+def delete_my_vehicle(
+    vehicle_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_from_token),
+):
+    """Delete customer vehicle."""
+    ok = rescue_svc.delete_customer_vehicle(db, current_user["user_id"], vehicle_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Vehicle not found or not owned by you")
+    return success_response(data={}, message="Vehicle deleted successfully")
 
 @router.post("/chat/{request_id}/image", response_model=dict)
 def upload_chat_image(

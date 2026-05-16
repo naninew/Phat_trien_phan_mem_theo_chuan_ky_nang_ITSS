@@ -6,7 +6,7 @@ from sqlalchemy import or_
 from passlib.context import CryptContext
 from typing import Optional, Tuple
 
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, AccountStatus
 from app.schemas.auth import UserRegister
 from app.utils.jwt_helper import create_access_token, create_refresh_token, get_current_user_from_token
 
@@ -101,7 +101,7 @@ def authenticate_user(db: Session, username: str, password: str) -> Optional[Use
         return None
     if not verify_password(password, user.password_hash):
         return None
-    if not user.is_active:
+    if user.status != AccountStatus.ACTIVE:
         return None
     return user
 
@@ -127,7 +127,7 @@ def create_user(db: Session, user_data: UserRegister, role: UserRole = UserRole.
         phone=user_data.phone,
         email=user_data.email,
         role=role,
-        is_active=True
+        status=AccountStatus.ACTIVE
     )
     
     db.add(db_user)
@@ -159,14 +159,14 @@ def generate_tokens(user: User) -> Tuple[str, str]:
     return access_token, refresh_token
 
 
-def update_user_status(db: Session, user_id: int, is_active: bool) -> Optional[User]:
+def update_user_status(db: Session, user_id: int, status: AccountStatus) -> Optional[User]:
     """
     Update user active status.
     
     Args:
         db: Database session
         user_id: User ID
-        is_active: New active status
+        status: New account status
     
     Returns:
         Updated User object if found, None otherwise
@@ -175,7 +175,7 @@ def update_user_status(db: Session, user_id: int, is_active: bool) -> Optional[U
     if not user:
         return None
     
-    user.is_active = is_active
+    user.status = status
     db.commit()
     db.refresh(user)
     

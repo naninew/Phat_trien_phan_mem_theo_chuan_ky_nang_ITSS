@@ -16,6 +16,13 @@ class UserRole(str, enum.Enum):
     ADMIN = "admin"
 
 
+class AccountStatus(str, enum.Enum):
+    """Account status enumeration."""
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    SUSPENDED = "SUSPENDED"
+
+
 class User(Base):
     """User table for storing all system users."""
     
@@ -28,7 +35,8 @@ class User(Base):
     phone = Column(String(20), nullable=False, index=True)
     email = Column(String(100), unique=True, nullable=False, index=True)
     role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.CUSTOMER)
-    is_active = Column(Boolean, default=True)
+    status = Column(SQLEnum(AccountStatus), nullable=False, default=AccountStatus.ACTIVE)
+    address = Column(String(200), nullable=True)
     avatar_url = Column(String(500), nullable=True)  # Profile picture URL
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

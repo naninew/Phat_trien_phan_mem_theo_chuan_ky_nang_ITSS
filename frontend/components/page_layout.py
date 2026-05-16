@@ -4,35 +4,39 @@ Standard Page Layout – consistent wrapper for all pages.
 from nicegui import ui
 from contextlib import contextmanager
 from components.navbar import create_navbar
+from components.sidebar import create_sidebar
+from core.auth import is_authenticated
 
 @contextmanager
-def page_layout(current_route: str = "", title: str = "Hệ thống cứu hộ"):
+def page_layout(current_route: str = "", title: str = "Rescue24"):
     """
-    Context manager to wrap page content with standard navbar and styling.
-    Usage:
-    with page_layout("/route", "Page Title"):
-        ui.label("Content")
+    Context manager to wrap page content with standard navbar, sidebar, and styling.
     """
     # 1. Navbar
-    create_navbar(current_route)
+    create_navbar()
     
-    # 2. Main content container
-    with ui.column().classes("w-full min-h-screen bg-[#fdfbff]"):
-        # Header / Hero area (optional decoration)
-        with ui.column().classes("w-full p-6 md:p-10 max-w-7xl mx-auto gap-6"):
-            # Breadcrumbs or simple title
-            with ui.row().classes("items-center gap-2"):
-                ui.label(title).classes("text-3xl md:text-4xl font-bold text-[#001b3e] font-outfit tracking-tight")
+    # 2. Sidebar (only for authenticated users)
+    if is_authenticated():
+        create_sidebar()
+
+    # 3. Main content container
+    # If authenticated, we need to account for sidebar width (drawer usually handles this in NiceGUI)
+    with ui.column().classes("w-full min-h-screen bg-surface"):
+        # Spacer for fixed navbar
+        ui.element('div').classes('h-16 w-full')
+        
+        with ui.column().classes("w-full p-4 md:p-8 max-w-7xl mx-auto gap-6"):
+            # Page Title Area
+            if title:
+                with ui.row().classes("items-center justify-between w-full mb-4"):
+                    ui.label(title).classes("text-3xl font-bold text-on-surface font-outfit tracking-tight")
             
             # This is where the page content will go
             yield
             
-    # 3. Footer
-    with ui.footer().classes("bg-[#fdfbff] border-t border-[#e0e2ec] py-8"):
+    # 4. Footer
+    with ui.footer().classes("bg-surface border-t border-surface-variant py-6 mt-auto"):
         with ui.row().classes("w-full max-w-7xl mx-auto px-6 justify-between items-center"):
-            with ui.column().classes("gap-1"):
-                ui.label("© 2024 Roadside Assistance System").classes("text-sm text-[#44474e] font-medium")
-                ui.label("Hỗ trợ kỹ thuật 24/7: 1900 1234").classes("text-xs text-[#74777f]")
-            with ui.row().classes("gap-4"):
-                ui.link("Điều khoản", "#").classes("text-sm text-[#005fb0]")
-                ui.link("Bảo mật", "#").classes("text-sm text-[#005fb0]")
+            ui.label("© 2026 Roadside Assistance System").classes("text-sm text-on-surface-variant")
+            with ui.row().classes("gap-6"):
+                ui.label("Hotline: 1900 2424").classes("text-sm font-bold text-primary")

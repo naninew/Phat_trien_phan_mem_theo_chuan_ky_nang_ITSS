@@ -12,11 +12,17 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.company import RescueCompany
-from app.models.request import RescueRequest, RequestStatus
+from app.models.request import RescueRequest, RequestStatus, RequestService, ServiceAssignment
 from app.models.review import Review
 from app.models.service import Service
-from app.models.vehicle import RescueVehicle
-from app.schemas.rescue import RescueRequestCreate, ServiceCreate, VehicleCreate
+from app.models.vehicle import RescueVehicle, Vehicle
+from app.models.staff import RescueStaff, StaffStatus
+from app.schemas.rescue import (
+    RescueRequestCreate, ServiceCreate, 
+    RescueVehicleCreate, CustomerVehicleCreate, CustomerVehicleUpdate,
+    RescueStaffCreate, RescueStaffUpdate, ServiceAssignmentCreate, PaymentCreate,
+    RescueCompanyCreate
+)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Constants
@@ -64,15 +70,37 @@ def get_all_companies(db: Session, status_filter: Optional[str] = None) -> List[
     return q.order_by(RescueCompany.created_at.desc()).all()
 
 
+def create_company_profile(db: Session, owner_id: int, data: RescueCompanyCreate) -> RescueCompany:
+    """Tạo profile công ty mới cho owner."""
+    company = RescueCompany(
+        owner_id=owner_id,
+        company_name=data.company_name,
+        address=data.address,
+        hotline=data.hotline,
+        business_license=data.business_license or f"LIC-{owner_id}",
+        operating_area=data.operating_area,
+        description=data.description,
+        latitude=data.latitude,
+        longitude=data.longitude,
+        service_radius_km=data.service_radius_km or 20.0,
+        status="pending",
+        is_verified=False
+    )
+    db.add(company)
+    db.commit()
+    db.refresh(company)
+    return company
+
+
 def find_nearby_companies(
     db: Session,
     latitude: float,
     longitude: float,
-    service_name: str,
+    service_ids: List[int],
     radius_km: float = 50.0,
 ) -> List[Tuple[RescueCompany, float, List[Service]]]:
     """
-    Tìm các công ty cứu hộ gần vị trí người dùng có dịch vụ phù hợp (khớp theo tên).
+    Tìm các công ty cứu hộ gần vị trí người dùng có cung cấp tất cả các dịch vụ yêu cầu.
     """
     companies = db.query(RescueCompany).filter(
         RescueCompany.status == "active",
@@ -88,16 +116,16 @@ def find_nearby_companies(
             continue
 
         # Lấy tất cả services của công ty
-        services = db.query(Service).filter(
+        company_services = db.query(Service).filter(
             Service.company_id == company.id,
             Service.is_active == True,
         ).all()
+        company_service_ids = {s.id for s in company_services}
 
-        # Kiểm tra xem công ty có cung cấp dịch vụ có tên khớp không
-        if not any(s.service_name.lower() == service_name.lower() for s in services):
-            continue
-
-        results.append((company, distance, services))
+        # Nếu công ty có đủ các services được yêu cầu
+        if all(sid in company_service_ids for sid in service_ids):
+            matched_services = [s for s in company_services if s.id in service_ids]
+            results.append((company, distance, matched_services))
 
     results.sort(key=lambda x: x[1])
     return results
@@ -119,11 +147,24 @@ def create_service(db: Session, company_id: int, service_data: ServiceCreate) ->
     svc = Service(
         service_name=service_data.service_name,
         base_price=service_data.base_price,
+        estimated_duration=service_data.estimated_duration,
         description=service_data.description,
         company_id=company_id,
         is_active=True,
     )
     db.add(svc)
+    db.commit()
+    db.refresh(svc)
+    return svc
+
+def update_service(db: Session, company_id: int, service_id: int, data: dict) -> Optional[Service]:
+    svc = db.query(Service).filter(Service.id == service_id, Service.company_id == company_id).first()
+    if not svc:
+        return None
+    if "service_name" in data: svc.service_name = data["service_name"]
+    if "base_price" in data: svc.base_price = data["base_price"]
+    if "estimated_duration" in data: svc.estimated_duration = data["estimated_duration"]
+    if "description" in data: svc.description = data["description"]
     db.commit()
     db.refresh(svc)
     return svc
@@ -148,17 +189,31 @@ def create_rescue_request(
 ) -> RescueRequest:
     req = RescueRequest(
         user_id=user_id,
-        service_id=request_data.service_id,
+        vehicle_id=request_data.vehicle_id,
         company_id=request_data.company_id,
         latitude=request_data.latitude,
         longitude=request_data.longitude,
         address_description=request_data.address_description,
-        car_issue_detail=request_data.car_issue_detail,
+        incident_type=request_data.incident_type,
+        description=request_data.description,
         images=request_data.images or [],
         status=RequestStatus.PENDING,
         payment_method=request_data.payment_method or "cash",
     )
     db.add(req)
+    db.flush() # Để lấy id cho req
+    
+    # Tạo các RequestService
+    services = db.query(Service).filter(Service.id.in_(request_data.service_ids)).all()
+    for s in services:
+        rs = RequestService(
+            request_id=req.id,
+            service_id=s.id,
+            quantity=1,
+            unit_price=s.base_price
+        )
+        db.add(rs)
+
     db.commit()
     db.refresh(req)
     return req
@@ -204,9 +259,8 @@ def accept_request(
     request_id: int,
     company_id: int,
     eta_minutes: int,
-    vehicle_id: Optional[int] = None,
 ) -> Optional[RescueRequest]:
-    """Công ty tiếp nhận request: gán company, ETA, vehicle, chuyển trạng thái."""
+    """Công ty tiếp nhận request: gán company, ETA, chuyển trạng thái ACCEPTED."""
     req = get_request_by_id(db, request_id)
     if not req or req.status != RequestStatus.PENDING:
         return None
@@ -214,11 +268,52 @@ def accept_request(
     req.company_id = company_id
     req.eta_minutes = eta_minutes
     req.status = RequestStatus.ACCEPTED
-    if vehicle_id:
-        req.vehicle_id = vehicle_id
-        # Đánh dấu xe đang làm nhiệm vụ
-        _set_vehicle_status(db, vehicle_id, "on_mission")
 
+    db.commit()
+    db.refresh(req)
+    return req
+
+def reject_request(
+    db: Session,
+    request_id: int,
+    company_id: int,
+) -> Optional[RescueRequest]:
+    """Công ty từ chối request."""
+    req = get_request_by_id(db, request_id)
+    if not req or req.status != RequestStatus.PENDING:
+        return None
+    req.status = RequestStatus.REJECTED
+    req.company_id = None
+    db.commit()
+    db.refresh(req)
+    return req
+
+def assign_request(
+    db: Session,
+    request_id: int,
+    company_id: int,
+    assignment_data: ServiceAssignmentCreate
+) -> Optional[RescueRequest]:
+    """Phân công nhân viên và xe cho request."""
+    req = get_request_by_id(db, request_id)
+    if not req or req.company_id != company_id or req.status != RequestStatus.ACCEPTED:
+        return None
+    
+    assignment = ServiceAssignment(
+        request_id=req.id,
+        staff_id=assignment_data.staff_id,
+        rescue_vehicle_id=assignment_data.rescue_vehicle_id,
+        notes=assignment_data.notes
+    )
+    db.add(assignment)
+    req.status = RequestStatus.ASSIGNED
+    
+    _set_vehicle_status(db, assignment_data.rescue_vehicle_id, "on_mission")
+    
+    staff = db.query(RescueStaff).filter(RescueStaff.id == assignment_data.staff_id).first()
+    if staff:
+        staff.status = StaffStatus.BUSY
+        
     db.commit()
     db.refresh(req)
     return req
@@ -228,9 +323,8 @@ def update_request_status(
     db: Session,
     request_id: int,
     status: str,
-    vehicle_id: Optional[int] = None,
     eta_minutes: Optional[int] = None,
-    total_cost: Optional[float] = None,
+    agreed_price: Optional[float] = None,
 ) -> Optional[RescueRequest]:
     req = get_request_by_id(db, request_id)
     if not req:
@@ -238,20 +332,24 @@ def update_request_status(
 
     req.status = status
 
-    if vehicle_id is not None:
-        req.vehicle_id = vehicle_id
     if eta_minutes is not None:
         req.eta_minutes = eta_minutes
-    if total_cost is not None:
-        req.total_cost = total_cost
+    if agreed_price is not None:
+        req.agreed_price = agreed_price
 
-    if status == RequestStatus.ON_SITE:
+    if status == RequestStatus.ON_THE_WAY:
+        # Tùy chọn logic thêm khi đang trên đường
+        pass
+    elif status == RequestStatus.IN_PROGRESS:
         req.actual_arrival_time = datetime.utcnow()
     elif status == RequestStatus.COMPLETED:
         req.actual_completion_time = datetime.utcnow()
-        # Giải phóng xe
-        if req.vehicle_id:
-            _set_vehicle_status(db, req.vehicle_id, "available")
+        # Giải phóng xe và nhân viên
+        if req.assignment:
+            _set_vehicle_status(db, req.assignment.rescue_vehicle_id, "available")
+            staff = db.query(RescueStaff).filter(RescueStaff.id == req.assignment.staff_id).first()
+            if staff:
+                staff.status = StaffStatus.AVAILABLE
 
     db.commit()
     db.refresh(req)
@@ -267,8 +365,11 @@ def cancel_request(db: Session, request_id: int, user_id: int) -> Optional[Rescu
         return None
 
     req.status = RequestStatus.CANCELLED
-    if req.vehicle_id:
-        _set_vehicle_status(db, req.vehicle_id, "available")
+    if req.assignment:
+        _set_vehicle_status(db, req.assignment.rescue_vehicle_id, "available")
+        staff = db.query(RescueStaff).filter(RescueStaff.id == req.assignment.staff_id).first()
+        if staff:
+            staff.status = StaffStatus.AVAILABLE
     db.commit()
     db.refresh(req)
     return req
@@ -319,6 +420,36 @@ def submit_review(
     db.refresh(review)
     return review
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Payment
+# ──────────────────────────────────────────────────────────────────────────────
+def process_payment(
+    db: Session,
+    request_id: int,
+    user_id: int,
+    payment_data: PaymentCreate
+) -> Optional[RescueRequest]:
+    from app.models.payment import Payment
+    req = get_request_by_id(db, request_id)
+    if not req or req.user_id != user_id or req.status != RequestStatus.COMPLETED:
+        return None
+    
+    payment = Payment(
+        rescue_request_id=request_id,
+        amount=payment_data.amount,
+        payment_method=payment_data.payment_method,
+        transaction_id=payment_data.transaction_id,
+        status="success"
+    )
+    db.add(payment)
+    
+    req.payment_status = "paid"
+    req.payment_method = payment_data.payment_method
+    
+    db.commit()
+    db.refresh(req)
+    return req
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Vehicle
@@ -327,9 +458,9 @@ def get_company_vehicles(db: Session, company_id: int) -> List[RescueVehicle]:
     return db.query(RescueVehicle).filter(RescueVehicle.company_id == company_id).all()
 
 
-def create_vehicle(db: Session, company_id: int, vehicle_data: VehicleCreate) -> RescueVehicle:
+def create_vehicle(db: Session, company_id: int, vehicle_data: RescueVehicleCreate) -> RescueVehicle:
     v = RescueVehicle(
-        license_plate=vehicle_data.license_plate,
+        plate_number=vehicle_data.plate_number,
         vehicle_type=vehicle_data.vehicle_type,
         capacity=vehicle_data.capacity,
         company_id=company_id,
@@ -375,6 +506,81 @@ def _set_vehicle_status(db: Session, vehicle_id: int, status: str) -> None:
     if v:
         v.status = status
         db.commit()
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Customer Vehicle
+# ──────────────────────────────────────────────────────────────────────────────
+def get_customer_vehicles(db: Session, customer_id: int) -> List[Vehicle]:
+    return db.query(Vehicle).filter(Vehicle.customer_id == customer_id).all()
+
+def create_customer_vehicle(db: Session, customer_id: int, vehicle_data: CustomerVehicleCreate) -> Vehicle:
+    v = Vehicle(
+        customer_id=customer_id,
+        license_plate=vehicle_data.license_plate,
+        brand=vehicle_data.brand,
+        model=vehicle_data.model,
+        year=vehicle_data.year,
+        fuel_type=vehicle_data.fuel_type
+    )
+    db.add(v)
+    db.commit()
+    db.refresh(v)
+    return v
+
+def update_customer_vehicle(db: Session, customer_id: int, vehicle_id: int, vehicle_data: CustomerVehicleUpdate) -> Optional[Vehicle]:
+    v = db.query(Vehicle).filter(Vehicle.id == vehicle_id, Vehicle.customer_id == customer_id).first()
+    if not v:
+        return None
+    if vehicle_data.brand is not None: v.brand = vehicle_data.brand
+    if vehicle_data.model is not None: v.model = vehicle_data.model
+    if vehicle_data.year is not None: v.year = vehicle_data.year
+    if vehicle_data.fuel_type is not None: v.fuel_type = vehicle_data.fuel_type
+    db.commit()
+    db.refresh(v)
+    return v
+
+def delete_customer_vehicle(db: Session, customer_id: int, vehicle_id: int) -> bool:
+    v = db.query(Vehicle).filter(Vehicle.id == vehicle_id, Vehicle.customer_id == customer_id).first()
+    if not v:
+        return False
+    db.delete(v)
+    db.commit()
+    return True
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Rescue Staff
+# ──────────────────────────────────────────────────────────────────────────────
+def get_company_staff(db: Session, company_id: int) -> List[RescueStaff]:
+    return db.query(RescueStaff).filter(RescueStaff.company_id == company_id).all()
+
+def create_staff(db: Session, company_id: int, staff_data: RescueStaffCreate) -> RescueStaff:
+    staff = RescueStaff(
+        company_id=company_id,
+        skill_level=staff_data.skill_level,
+        status=StaffStatus.AVAILABLE
+    )
+    db.add(staff)
+    db.commit()
+    db.refresh(staff)
+    return staff
+
+def update_staff(db: Session, company_id: int, staff_id: int, staff_data: RescueStaffUpdate) -> Optional[RescueStaff]:
+    staff = db.query(RescueStaff).filter(RescueStaff.id == staff_id, RescueStaff.company_id == company_id).first()
+    if not staff:
+        return None
+    if staff_data.skill_level is not None: staff.skill_level = staff_data.skill_level
+    if staff_data.status is not None: staff.status = StaffStatus(staff_data.status)
+    db.commit()
+    db.refresh(staff)
+    return staff
+
+def delete_staff(db: Session, company_id: int, staff_id: int) -> bool:
+    staff = db.query(RescueStaff).filter(RescueStaff.id == staff_id, RescueStaff.company_id == company_id).first()
+    if not staff:
+        return False
+    db.delete(staff)
+    db.commit()
+    return True
 
 
 # ──────────────────────────────────────────────────────────────────────────────

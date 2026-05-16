@@ -3,11 +3,12 @@ Admin routes – quản lý users, companies và thống kê hệ thống.
 Tất cả endpoints yêu cầu role=admin.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.database import get_db
-from app.services import auth_svc, rescue_svc
+from app.services import auth_svc, rescue_svc, report_svc
 from app.models.user import User
 from app.models.company import RescueCompany
 from app.utils.response import success_response
@@ -29,8 +30,123 @@ def get_stats(
     current_user: dict = Depends(auth_svc.get_current_user_from_token),
 ):
     _require_admin(current_user)
-    stats = rescue_svc.get_admin_stats(db)
+    stats = report_svc.get_admin_stats(db)
     return success_response(data=stats, message="Success")
+
+
+@router.get("/stats/charts")
+def get_stats_charts(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    _require_admin(current_user)
+    charts = report_svc.get_chart_stats(db)
+    return success_response(data=charts, message="Success")
+
+
+@router.get("/reports/export")
+def export_reports(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    _require_admin(current_user)
+    data = report_svc.get_requests_for_export(db)
+    return success_response(data=data, message="Success")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Content Moderation
+# ──────────────────────────────────────────────────────────────────────────────
+@router.get("/reviews")
+def list_reviews(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    _require_admin(current_user)
+    from app.models.review import Review
+    reviews = db.query(Review).order_by(Review.created_at.desc()).all()
+    return success_response(
+        data=[
+            {
+                "id": r.id,
+                "customer_name": r.user.full_name,
+                "company_name": r.company.company_name,
+                "rating": r.rating,
+                "comment": r.comment,
+                "created_at": r.created_at.isoformat(),
+            }
+            for r in reviews
+        ],
+        message="Success",
+    )
+
+
+@router.delete("/reviews/{review_id}")
+def delete_review(
+    review_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    _require_admin(current_user)
+    from app.models.review import Review
+    review = db.query(Review).filter(Review.id == review_id).first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đánh giá")
+    
+    # Update company average rating before deleting
+    company = review.company
+    db.delete(review)
+    db.commit()
+    
+    # Recalculate average
+    new_avg = db.query(func.avg(Review.rating)).filter(Review.company_id == company.id).scalar() or 0
+    new_count = db.query(func.count(Review.id)).filter(Review.company_id == company.id).scalar()
+    company.rating_avg = round(float(new_avg), 1)
+    company.rating_count = new_count
+    db.commit()
+    
+    return success_response(data={}, message="Đã xóa đánh giá")
+
+
+@router.get("/community/posts")
+def list_community_posts(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    _require_admin(current_user)
+    from app.models.community import CommunityPost
+    posts = db.query(CommunityPost).order_by(CommunityPost.created_at.desc()).all()
+    return success_response(
+        data=[
+            {
+                "id": p.id,
+                "user_name": p.user.full_name,
+                "title": p.title,
+                "content": p.content,
+                "incident_type": p.incident_type,
+                "created_at": p.created_at.isoformat(),
+            }
+            for p in posts
+        ],
+        message="Success",
+    )
+
+
+@router.delete("/community/posts/{post_id}")
+def delete_community_post(
+    post_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    _require_admin(current_user)
+    from app.models.community import CommunityPost
+    post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bài đăng")
+    
+    db.delete(post)
+    db.commit()
+    return success_response(data={}, message="Đã xóa bài đăng")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -63,7 +179,7 @@ def list_users(
                 "email": u.email,
                 "phone": u.phone,
                 "role": u.role.value,
-                "is_active": u.is_active,
+                "status": u.status.value,
                 "created_at": u.created_at.isoformat(),
             }
             for u in users
@@ -84,8 +200,9 @@ def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="Không tìm thấy user")
     
-    if "is_active" in user_data:
-        user.is_active = user_data["is_active"]
+    if "status" in user_data:
+        from app.models.user import AccountStatus
+        user.status = AccountStatus(user_data["status"])
     if "role" in user_data:
         user.role = user_data["role"]
     
@@ -106,9 +223,11 @@ def toggle_user_status(
     if user.id == current_user["user_id"]:
         raise HTTPException(status_code=400, detail="Không thể tự khóa tài khoản mình")
 
-    updated = auth_svc.update_user_status(db, user_id, not user.is_active)
+    from app.models.user import AccountStatus
+    new_status = AccountStatus.SUSPENDED if user.status == AccountStatus.ACTIVE else AccountStatus.ACTIVE
+    updated = auth_svc.update_user_status(db, user_id, new_status)
     return success_response(
-        data={"id": updated.id, "is_active": updated.is_active},
+        data={"id": updated.id, "status": updated.status.value},
         message="Đã cập nhật trạng thái user",
     )
 
@@ -150,7 +269,7 @@ def list_companies(
                 "company_name": c.company_name,
                 "address": c.address,
                 "hotline": c.hotline,
-                "license_number": c.license_number,
+                "business_license": c.business_license,
                 "status": c.status,
                 "is_verified": c.is_verified,
                 "rating_avg": c.rating_avg,

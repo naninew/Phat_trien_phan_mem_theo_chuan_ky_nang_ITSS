@@ -23,6 +23,7 @@ def register(user_data: UserRegister, db: Session = Depends(get_db)) -> dict:
     - **full_name**: Full name of the user
     - **phone**: Phone number
     - **email**: Valid email address
+    - **role**: Optional user role (default: customer)
     """
     # Check if username already exists
     existing_user = auth_svc.get_user_by_username(db, user_data.username)
@@ -41,7 +42,9 @@ def register(user_data: UserRegister, db: Session = Depends(get_db)) -> dict:
         )
     
     # Create user
-    user = auth_svc.create_user(db, user_data)
+    from app.models.user import UserRole
+    role_val = user_data.role if user_data.role else "customer"
+    user = auth_svc.create_user(db, user_data, role=UserRole(role_val))
     
     return success_response(
         data={"user_id": user.id, "username": user.username},
@@ -107,7 +110,8 @@ def get_current_user(
             "email": user.email,
             "phone": user.phone,
             "role": user.role.value,
-            "is_active": user.is_active
+            "status": user.status.value,
+            "address": user.address
         },
         message="Success"
     )

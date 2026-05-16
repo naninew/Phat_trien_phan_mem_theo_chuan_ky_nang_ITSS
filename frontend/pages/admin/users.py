@@ -72,7 +72,14 @@ def create_users_page():
                 "company_staff": ("Công ty", "green"),
                 "customer": ("Khách hàng", "blue"),
             }
+            status_colors = {
+                "ACTIVE": "green",
+                "INACTIVE": "amber",
+                "SUSPENDED": "red",
+            }
             role_label, color = role_map.get(u['role'], (u['role'], "gray"))
+            status = u.get('status', 'ACTIVE')
+            s_color = status_colors.get(status, "gray")
 
             with ui.card().classes("w-full rounded-2xl p-6 shadow-sm border border-gray-100 hover:border-indigo-200 transition-all"):
                 with ui.row().classes("w-full items-center justify-between"):
@@ -84,10 +91,11 @@ def create_users_page():
                     
                     with ui.row().classes("items-center gap-3"):
                         ui.label(role_label).classes(f"text-[10px] font-bold uppercase px-3 py-1 rounded-full bg-{color}-50 text-{color}-600 border border-{color}-100")
+                        ui.label(status).classes(f"text-[10px] font-bold uppercase px-3 py-1 rounded-full bg-{s_color}-50 text-{s_color}-600 border border-{s_color}-100")
                         
-                        # Active/Inactive toggle
-                        is_active = u.get('is_active', True)
-                        ui.switch(value=is_active, on_change=lambda e: _toggle_active(u, e.value)).props("dense color=green")
+                        # Active/Suspended toggle
+                        is_active = status == "ACTIVE"
+                        ui.switch(value=is_active, on_change=lambda e: _toggle_status(u, e.value)).props("dense color=green")
 
                         # More actions
                         with ui.button(icon="more_vert").props("flat round dense") as more_btn:
@@ -104,10 +112,12 @@ def create_users_page():
                         ui.icon("event", size="1rem")
                         ui.label(f"Tham gia: {u.get('created_at', 'N/A')[:10]}")
 
-        async def _toggle_active(user, val):
+        async def _toggle_status(user, val):
             try:
-                await update_user(user['id'], {"is_active": val})
-                ui.notify(f"Đã {'kích hoạt' if val else 'vô hiệu hóa'} {user['username']}", type="info")
+                new_status = "ACTIVE" if val else "SUSPENDED"
+                await update_user(user['id'], {"status": new_status})
+                ui.notify(f"Đã chuyển trạng thái @{user['username']} sang {new_status}", type="info")
+                await _load_data()
             except Exception as e:
                 ui.notify(f"Lỗi: {e}", type="negative")
 
