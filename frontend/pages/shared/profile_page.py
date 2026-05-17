@@ -26,6 +26,7 @@ def create_profile_page():
             try:
                 async with httpx.AsyncClient() as client:
                     r = await client.get(f"{BACKEND_URL}/profile/me", headers=headers)
+                    print("Profile data response:", r.status_code, r.text)  # Debug log
                     if r.status_code == 200:
                         data = r.json()["data"]
                         name_input.value = data["full_name"]
@@ -35,6 +36,7 @@ def create_profile_page():
                         
                         if profile_data['avatar_url']:
                             avatar_img.set_source(f"{BACKEND_URL.replace('/api/v1', '')}{profile_data['avatar_url']}")
+                            print("Avatar URL set to:", avatar_img.source)  # Debug log
                         
                         if role == "company_staff" and data.get("company"):
                             comp = data["company"]

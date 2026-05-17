@@ -41,11 +41,25 @@ app.include_router(admin_routes.router,     prefix="/api/v1")
 app.include_router(chat_routes.router,      prefix="/api/v1")
 app.include_router(community_routes.router, prefix="/api/v1")
 
-# Static files (uploaded images)
-_uploads_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+# --- SỬA LẠI KHU VỰC STATIC FILES TẠI ĐÂY ---
+
+# CURRENT_DIR lúc này đang là: .../backend/app
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Bỏ chữ "app" ở giữa đi để đường dẫn chuẩn là: .../backend/app/uploads
+_uploads_dir = os.path.join(CURRENT_DIR, "uploads")
+
+print("=== ĐƯỜNG DẪN STATIC THỰC TẾ BACKEND ĐANG TÌM ===")
+print(os.path.abspath(_uploads_dir))
+print("==================================================")
+
+# Tạo thư mục con 'images' nếu chưa có (.../backend/app/uploads/images)
 os.makedirs(os.path.join(_uploads_dir, "images"), exist_ok=True)
+
+# Mount thư mục tĩnh (chỉ giữ lại 1 lệnh duy nhất)
 app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
 
+# ──────────────────────────────────────────────────────────────────────────────
 
 @app.on_event("startup")
 async def startup_event():

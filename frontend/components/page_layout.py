@@ -23,9 +23,8 @@ def page_layout(current_route: str = "", title: str = "Rescue24"):
     # If authenticated, we need to account for sidebar width (drawer usually handles this in NiceGUI)
     with ui.column().classes("w-full min-h-screen bg-surface"):
         # Spacer for fixed navbar
-        ui.element('div').classes('h-16 w-full')
         
-        with ui.column().classes("w-full p-4 md:p-8 max-w-7xl mx-auto gap-6"):
+        with ui.column().classes("w-full min-h-screen bg-surface pt-10"):
             # Page Title Area
             if title:
                 with ui.row().classes("items-center justify-between w-full mb-4"):

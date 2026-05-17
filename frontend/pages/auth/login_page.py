@@ -45,14 +45,20 @@ def create_login_page():
                     ui.label('Hệ thống cứu hộ xe thông minh').classes('text-on-surface-variant')
 
                 # Form
-                with ui.column().classes('w-full gap-6'):
+                with ui.column().classes('w-full gap-5'):
                     username = ui.input('Tên đăng nhập').classes('w-full').props('outlined rounded')
                     password = ui.input('Mật khẩu').classes('w-full').props('outlined rounded password-toggle-button').props('type=password')
                     
-                    error_label = ui.label('').classes('text-error text-sm text-center min-h-[1.5rem]')
+                    # THÊM MỚI: Dòng quên mật khẩu nằm bên phải dưới ô password
+                    with ui.row().classes('w-full justify-end -mt-2'):
+                        ui.link('Quên mật khẩu?', '/forgot-password').classes('text-sm text-primary hover:underline font-medium')
                     
-                    login_btn = ui.button('ĐĂNG NHẬP', on_click=lambda: do_login()) \
-                        .classes('w-full py-6 rounded-2xl bg-primary text-white font-bold text-lg shadow-lg hover:shadow-primary/30 transform transition hover:-translate-y-1')
+                    error_label = ui.label('').classes('text-error text-sm text-center min-h-[1.5rem] w-full')
+                    
+                    # ĐÃ CHỈNH SỬA: Gom nút vào một khối căn giữa, bỏ w-full và hạ py xuống để nút bé lại, gọn gàng hơn
+                    with ui.row().classes('w-full justify-center mt-2'):
+                        login_btn = ui.button('ĐĂNG NHẬP', on_click=lambda: do_login()) \
+                            .classes('px-12 py-4 rounded-xl bg-primary text-white font-bold text-base shadow-md hover:shadow-primary/30 transform transition hover:-translate-y-0.5')
                 
                 # Footer
                 with ui.row().classes('w-full justify-center items-center mt-8 gap-1'):
@@ -73,9 +79,6 @@ def create_login_page():
                 result = await AuthService.login(u, p)
                 if result['success']:
                     ui.notify('Đăng nhập thành công!', type='positive')
-                    # Redirect is handled inside AuthService.login via login_user? 
-                    # No, AuthService.login calls login_user but we still need to navigate.
-                    # Wait, login_user doesn't navigate.
                     ui.navigate.to(get_redirect_url_for_role(result['data']['user']['role']))
                 else:
                     error_label.set_text(result['message'])
