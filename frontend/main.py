@@ -314,7 +314,7 @@ def setup_app():
         title=APP_TITLE,
         storage_secret=STORAGE_SECRET,
         reload=True,
-        port=8080,
+        port=int(os.getenv("FRONTEND_PORT", "8080")),
     )
 
 
