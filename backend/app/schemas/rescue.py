@@ -1,6 +1,7 @@
 """
 Rescue service schemas for requests, services, and related operations.
 """
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from datetime import datetime
@@ -201,6 +202,13 @@ class RescueVehicleCreate(BaseModel):
                 "capacity": "5 tấn"
             }
         }
+
+class RescueVehicleUpdate(BaseModel):
+    """Schema for updating a rescue vehicle."""
+    plate_number: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    capacity: Optional[str] = None
+    status: Optional[str] = None
 
 
 class RescueVehicleResponse(BaseModel):

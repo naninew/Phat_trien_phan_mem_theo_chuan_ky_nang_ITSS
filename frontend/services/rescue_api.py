@@ -143,7 +143,14 @@ async def get_my_vehicles() -> List[Dict[str, Any]]:
 async def add_vehicle(license_plate: str, vehicle_type: str, capacity: str = "") -> Dict[str, Any]:
     r = await api_client.post(
         "/rescue/vehicles",
-        data={"license_plate": license_plate, "vehicle_type": vehicle_type, "capacity": capacity or None},
+        data={"plate_number": license_plate, "vehicle_type": vehicle_type, "capacity": capacity or None},
+    )
+    return r.get("data", {})
+
+async def update_vehicle(vehicle_id: int, license_plate: str, vehicle_type: str, capacity: str = "") -> Dict[str, Any]:
+    r = await api_client.put(
+        f"/rescue/vehicles/{vehicle_id}",
+        data={"plate_number": license_plate, "vehicle_type": vehicle_type, "capacity": capacity or None},
     )
     return r.get("data", {})
 
