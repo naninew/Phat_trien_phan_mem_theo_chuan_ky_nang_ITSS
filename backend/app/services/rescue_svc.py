@@ -188,22 +188,25 @@ def create_rescue_request(
     request_data: RescueRequestCreate,
 ) -> RescueRequest:
     req = RescueRequest(
+        #service_id=request_data.service_ids[0],
         user_id=user_id,
         vehicle_id=request_data.vehicle_id,
         company_id=request_data.company_id,
         latitude=request_data.latitude,
         longitude=request_data.longitude,
         address_description=request_data.address_description,
-        incident_type=request_data.incident_type,
+        incident_type = request_data.incident_type,
         description=request_data.description,
         images=request_data.images or [],
         status=RequestStatus.PENDING,
         payment_method=request_data.payment_method or "cash",
+        #agreed_price = request_data.agreed_price,
     )
     db.add(req)
     db.flush() # Để lấy id cho req
-    
-    # Tạo các RequestService
+    print("===== REQUEST =====")
+    print(req)
+    #Tạo các RequestService
     services = db.query(Service).filter(Service.id.in_(request_data.service_ids)).all()
     for s in services:
         rs = RequestService(

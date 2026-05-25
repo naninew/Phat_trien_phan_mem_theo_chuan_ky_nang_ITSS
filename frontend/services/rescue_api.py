@@ -8,6 +8,11 @@ from services.api_client import api_client
 # ── Services (loại dịch vụ) ──────────────────────────────────────────────────
 async def get_services() -> List[Dict[str, Any]]:
     r = await api_client.get("/rescue/services")
+    data = r.get("data")
+
+    # DEBUG
+    print("RAW RESPONSE:", r)
+    print("DATA:", data)
     return r.get("data", [])
 
 
@@ -15,13 +20,26 @@ async def get_services() -> List[Dict[str, Any]]:
 async def find_nearby_companies(
     latitude: float,
     longitude: float,
-    service_name: str,
+    service_ids: List[int],
     radius_km: float = 50.0,
 ) -> List[Dict[str, Any]]:
+
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "service_ids": service_ids,
+        "radius_km": radius_km,
+    }
+
+    print("SEARCH PARAMS =", params)
+
     r = await api_client.get(
         "/rescue/companies/nearby",
-        params={"latitude": latitude, "longitude": longitude, "service_name": service_name, "radius_km": radius_km},
+        params=params,
     )
+
+    print("RAW COMPANY RESPONSE =", r)
+
     return r.get("data", [])
 
 
@@ -37,6 +55,7 @@ async def create_rescue_request(
     company_id: Optional[int] = None,
     payment_method: str = "cash",
     images: Optional[List[str]] = None,
+    #agreed_price = float,
 ) -> Dict[str, Any]:
     payload = {
         "service_ids": [service_id],
@@ -47,12 +66,16 @@ async def create_rescue_request(
         "incident_type": incident_type,
         "description": description,
         "payment_method": payment_method,
+        #"agreed_price" :agreed_price,
     }
+    print("===== PAYLOAD =====")
+    print(payload)
     if company_id:
         payload["company_id"] = company_id
     if images:
         payload["images"] = images
     r = await api_client.post("/rescue/requests", data=payload)
+    print(r)
     return r.get("data", {})
 
 

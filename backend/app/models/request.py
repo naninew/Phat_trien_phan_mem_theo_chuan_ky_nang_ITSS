@@ -30,7 +30,7 @@ class RescueRequest(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     company_id = Column(Integer, ForeignKey("rescue_companies.id"), nullable=True)
     vehicle_id = Column(Integer, ForeignKey("vehicles.id"), nullable=False) # Refers to customer's vehicle
-    
+
     # Location information
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
@@ -65,7 +65,7 @@ class RescueRequest(Base):
     vehicle = relationship("Vehicle")
     payment = relationship("Payment", back_populates="rescue_request", uselist=False)
     review = relationship("Review", back_populates="rescue_request", uselist=False)
-    
+
     request_services = relationship("RequestService", back_populates="request", cascade="all, delete-orphan")
     assignment = relationship("ServiceAssignment", back_populates="request", uselist=False, cascade="all, delete-orphan")
     

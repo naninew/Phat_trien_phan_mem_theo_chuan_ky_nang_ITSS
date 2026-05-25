@@ -36,11 +36,32 @@ router = APIRouter(prefix="/rescue", tags=["Rescue Services"])
 @router.get("/services")
 def list_services(db: Session = Depends(get_db)):
     """Lấy danh sách các tên dịch vụ độc nhất (để hiển thị dropdown)."""
-    services = db.query(Service.service_name).filter(Service.is_active == True).distinct().all()
+    
+    services = db.query(Service.id, Service.service_name).filter(Service.is_active == True).all()
+    # Sửa response để lấy id
+    result = [
+        {
+            "id": s.id,
+            "service_name": s.service_name
+        }
+        for s in services
+    ]
+
+    print("=== RAW SERVICES FROM DB ===")
+    print(services)
+
+    print("=== RESPONSE JSON ===")
+    print(result)
     return success_response(
-        data=[s.service_name for s in services],
-        message="Success",
-    )
+    data=[
+        {
+            "id": s.id,
+            "service_name": s.service_name
+        }
+        for s in services
+    ],
+    message="Success",
+)
 
 
 @router.post("/services")
@@ -191,19 +212,51 @@ def get_my_requests(
     current_user: dict = Depends(auth_svc.get_current_user_from_token),
 ):
     """Lấy danh sách requests của customer hiện tại."""
+
     from app.models.service import Service
     from app.models.company import RescueCompany
 
     requests = rescue_svc.get_user_requests(db, current_user["user_id"])
-    data = []
-    for r in requests:
-        company = db.query(RescueCompany).filter(RescueCompany.id == r.company_id).first() if r.company_id else None
-        services_data = []
-        for rs in r.request_services:
-            if rs.service:
-                services_data.append({"id": rs.service.id, "service_name": rs.service.service_name, "price": rs.unit_price})
 
-        data.append({
+    print("========== RAW REQUESTS ==========")
+    print(requests)
+
+    data = []
+
+    for r in requests:
+
+        print("========== REQUEST ==========")
+        print("ID =", r.id)
+        print("STATUS =", r.status)
+
+        company = (
+            db.query(RescueCompany)
+            .filter(RescueCompany.id == r.company_id)
+            .first()
+            if r.company_id else None
+        )
+
+        services_data = []
+
+        for rs in r.request_services:
+
+            print("---- REQUEST SERVICE ----")
+            print("RS =", rs)
+
+            if rs.service:
+
+                print("SERVICE ID =", rs.service.id)
+                print("SERVICE NAME =", rs.service.service_name)
+
+                services_data.append({
+                    "id": rs.service.id,
+                    "service_name": rs.service.service_name,
+                    "price": rs.unit_price
+                })
+
+        print("FINAL SERVICES DATA =", services_data)
+
+        item = {
             "id": r.id,
             "status": r.status,
             "services": services_data,
@@ -220,9 +273,18 @@ def get_my_requests(
             "feedback": r.feedback,
             "created_at": r.created_at.isoformat(),
             "updated_at": r.updated_at.isoformat(),
-        })
-    return success_response(data=data, message="Success")
+        }
+        print("FINAL ITEM =", item)
 
+        data.append(item)
+
+    print("========== FINAL RESPONSE ==========")
+    print(data)
+
+    return success_response(
+        data=data,
+        message="Success"
+    )
 
 @router.get("/requests/{request_id}")
 def get_request_detail(
