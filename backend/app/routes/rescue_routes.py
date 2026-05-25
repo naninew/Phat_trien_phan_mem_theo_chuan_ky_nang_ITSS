@@ -1,7 +1,9 @@
 """
 Rescue routes – đầy đủ endpoints cho customer, company staff và admin.
 """
+# pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 from typing import Optional, List
 
@@ -11,6 +13,7 @@ from app.schemas.rescue import (
     RescueRequestUpdate,
     ServiceCreate,
     RescueVehicleCreate,
+    RescueVehicleUpdate,
     RescueStaffCreate,
     RescueStaffUpdate,
     ServiceAssignmentCreate,
@@ -19,7 +22,6 @@ from app.schemas.rescue import (
     CustomerVehicleUpdate,
     CustomerVehicleResponse,
     RescueCompanyCreate,
-    RescueStaffCreate,
 )
 from app.services import rescue_svc, auth_svc
 from app.utils.response import success_response
@@ -666,6 +668,27 @@ def add_vehicle(
     return success_response(
         data={"id": vehicle.id, "plate_number": vehicle.plate_number},
         message="Đã thêm phương tiện",
+    )
+
+
+@router.put("/vehicles/{vehicle_id}")
+def update_vehicle(
+    vehicle_id: int,
+    vehicle_data: RescueVehicleUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
+
+    vehicle = rescue_svc.update_vehicle(db, vehicle_id, company.id, vehicle_data)
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phương tiện")
+
+    return success_response(
+        data={"id": vehicle.id, "plate_number": vehicle.plate_number},
+        message="Đã cập nhật phương tiện",
     )
 
 

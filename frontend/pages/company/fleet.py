@@ -1,12 +1,12 @@
 """
 Trang quản lý đội xe – dành cho công ty.
 """
+# pyrefly: ignore [missing-import]
 from nicegui import ui
 from typing import Optional, Dict, Any, List
-
 from core.auth import require_role
 from components.page_layout import page_layout
-from services.rescue_api import get_my_vehicles, add_vehicle, update_vehicle_status, delete_vehicle
+from services.rescue_api import get_my_vehicles, add_vehicle, update_vehicle_status, delete_vehicle, update_vehicle
 
 
 def create_fleet_page():
@@ -56,7 +56,7 @@ def create_fleet_page():
             with ui.card().classes("w-72 rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-all"):
                 with ui.column().classes("items-center w-full gap-2 text-center"):
                     ui.icon(icon, size="3rem", color=color)
-                    ui.label(v['license_plate']).classes("text-2xl font-bold text-gray-800 tracking-wider")
+                    ui.label(v.get('plate_number', v.get('license_plate', 'N/A'))).classes("text-2xl font-bold text-gray-800 tracking-wider")
                     ui.label(v['vehicle_type']).classes("text-sm text-gray-500 font-medium")
                     
                     ui.label(label).classes(f"text-[10px] font-bold uppercase px-3 py-1 rounded-full bg-{color}-50 text-{color}-600 border border-{color}-100 mt-2")
@@ -76,8 +76,9 @@ def create_fleet_page():
                         with ui.menu() as menu:
                             ui.menu_item("Đánh dấu: Sẵn sàng", on_click=lambda: _update_v_status(v['id'], 'available'))
                             ui.menu_item("Đánh dấu: Bảo trì", on_click=lambda: _update_v_status(v['id'], 'maintenance'))
+                            ui.menu_item("Sửa thông tin xe", on_click=lambda v=v: _show_edit_dialog(v))
                             ui.separator()
-                            ui.menu_item("Xóa xe", on_click=lambda: _confirm_delete(v))
+                            ui.menu_item("Xóa xe", on_click=lambda v=v: _confirm_delete(v))
                     
                     if v['status'] == 'available':
                         ui.label("Có thể gán việc").classes("text-[10px] text-green-600 font-bold")
@@ -110,6 +111,34 @@ def create_fleet_page():
                     ui.button("LƯU", on_click=do_add).classes("bg-indigo-600 text-white px-8 font-bold rounded-lg")
             dialog.open()
 
+        async def _show_edit_dialog(v):
+            with ui.dialog() as dialog, ui.card().classes("p-6 rounded-2xl w-[400px]"):
+                ui.label("Sửa thông tin phương tiện").classes("text-xl font-bold mb-4")
+                
+                plate = ui.input(label="Biển kiểm soát *", value=v.get('plate_number', v.get('license_plate', ''))).classes("w-full").props("outlined")
+                vtype = ui.select(
+                    options=['Xe cẩu hạng nhẹ', 'Xe cẩu hạng nặng', 'Xe bán tải hỗ trợ', 'Xe máy cứu hộ'],
+                    label="Loại phương tiện *",
+                    value=v['vehicle_type']
+                ).classes("w-full mt-2").props("outlined")
+                cap = ui.input(label="Tải trọng / Ghi chú", value=v.get('capacity', '')).classes("w-full mt-2").props("outlined")
+                
+                with ui.row().classes("w-full justify-end gap-3 mt-6"):
+                    ui.button("Hủy", on_click=dialog.close).props("flat")
+                    async def do_edit():
+                        if not plate.value:
+                            ui.notify("Vui lòng nhập biển số", type="warning")
+                            return
+                        try:
+                            await update_vehicle(v['id'], plate.value, vtype.value, cap.value)
+                            ui.notify("Đã cập nhật thông tin xe", type="positive")
+                            dialog.close()
+                            await _load_data()
+                        except Exception as e:
+                            ui.notify(f"Lỗi: {e}", type="negative")
+                    ui.button("CẬP NHẬT", on_click=do_edit).classes("bg-indigo-600 text-white px-8 font-bold rounded-lg")
+            dialog.open()
+
         async def _update_v_status(vid, status):
             try:
                 await update_vehicle_status(vid, status)
@@ -120,7 +149,7 @@ def create_fleet_page():
 
         async def _confirm_delete(v):
             with ui.dialog() as dialog, ui.card().classes("p-6 rounded-2xl"):
-                ui.label(f"Xóa xe {v['license_plate']}?").classes("text-xl font-bold")
+                ui.label(f"Xóa xe {v.get('plate_number', v.get('license_plate', ''))}?").classes("text-xl font-bold")
                 ui.label("Hành động này không thể hoàn tác.").classes("text-gray-500 mb-6")
                 with ui.row().classes("w-full justify-end gap-3"):
                     ui.button("Đóng", on_click=dialog.close).props("flat")

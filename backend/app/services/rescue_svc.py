@@ -19,7 +19,7 @@ from app.models.vehicle import RescueVehicle, Vehicle
 from app.models.staff import RescueStaff, StaffStatus
 from app.schemas.rescue import (
     RescueRequestCreate, ServiceCreate, 
-    RescueVehicleCreate, CustomerVehicleCreate, CustomerVehicleUpdate,
+    RescueVehicleCreate, RescueVehicleUpdate, CustomerVehicleCreate, CustomerVehicleUpdate,
     RescueStaffCreate, RescueStaffUpdate, ServiceAssignmentCreate, PaymentCreate,
     RescueCompanyCreate
 )
@@ -470,6 +470,29 @@ def create_vehicle(db: Session, company_id: int, vehicle_data: RescueVehicleCrea
         status="available",
     )
     db.add(v)
+    db.commit()
+    db.refresh(v)
+    return v
+
+def update_vehicle(db: Session, vehicle_id: int, company_id: int, data: RescueVehicleUpdate) -> Optional[RescueVehicle]:
+    v = db.query(RescueVehicle).filter(
+        RescueVehicle.id == vehicle_id,
+        RescueVehicle.company_id == company_id,
+    ).first()
+    if not v:
+        return None
+    
+    if data.plate_number is not None:
+        v.plate_number = data.plate_number
+    if data.vehicle_type is not None:
+        v.vehicle_type = data.vehicle_type
+    if data.capacity is not None:
+        v.capacity = data.capacity
+    if data.status is not None:
+        if v.status == "on_mission" and data.status != "on_mission":
+            pass # Or handle logic here if we need to prevent status change during mission
+        v.status = data.status
+        
     db.commit()
     db.refresh(v)
     return v
