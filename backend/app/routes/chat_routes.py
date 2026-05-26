@@ -1,7 +1,7 @@
 """
 Chat and Notification routes.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -64,6 +64,71 @@ def get_messages(
 
     messages = chat_svc.get_messages_by_request(db, request_id)
     return success_response(data=[MessageResponse.from_orm(m) for m in messages])
+
+@router.get("/{request_id}", response_model=dict)
+def get_chat_by_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    """API shortcut: Lấy tin nhắn của yêu cầu (match frontend call)."""
+    req = rescue_svc.get_request_by_id(db, request_id)
+    if not req:
+        raise HTTPException(status_code=404, detail="Không tìm thấy yêu cầu")
+    
+    user_id = current_user["user_id"]
+    role = current_user.get("role")
+    
+    if role == "customer" and req.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Không có quyền truy cập chat")
+    if role == "company_staff":
+        company = rescue_svc.get_company_by_owner_id(db, user_id)
+        if not company or req.company_id != company.id:
+            raise HTTPException(status_code=403, detail="Không có quyền truy cập chat")
+
+    messages = chat_svc.get_messages_by_request(db, request_id)
+    result = []
+    for m in messages:
+        msg_dict = MessageResponse.from_orm(m).dict()
+        msg_dict["is_me"] = m.sender_id == user_id
+        msg_dict["message"] = m.content
+        msg_dict["created_at"] = m.sent_time.strftime("%H:%M %d/%m")
+        result.append(msg_dict)
+    return success_response(data=result)
+
+@router.post("/{request_id}", response_model=dict)
+def send_chat_by_request(
+    request_id: int,
+    message: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    """API shortcut: Gửi tin nhắn (match frontend call)."""
+    req = rescue_svc.get_request_by_id(db, request_id)
+    if not req:
+        raise HTTPException(status_code=404, detail="Không tìm thấy yêu cầu")
+    
+    user_id = current_user["user_id"]
+    role = current_user.get("role")
+    
+    if role == "customer" and req.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Không có quyền gửi tin nhắn")
+    if role == "company_staff":
+        company = rescue_svc.get_company_by_owner_id(db, user_id)
+        if not company or req.company_id != company.id:
+            raise HTTPException(status_code=403, detail="Không có quyền gửi tin nhắn")
+
+    # Determine receiver - frontend doesn't know receiver_id, so we use 0
+    sender_type = "customer" if role == "customer" else "company"
+    
+    msg_data = MessageCreate(
+        request_id=request_id,
+        receiver_id=0,  # Will be processed by backend logic
+        sender_type=sender_type,
+        content=message
+    )
+    msg = chat_svc.send_message(db, user_id, msg_data)
+    return success_response(data=MessageResponse.from_orm(msg).dict(), message="Đã gửi tin nhắn")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Notifications
