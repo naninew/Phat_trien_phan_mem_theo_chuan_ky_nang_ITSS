@@ -1,24 +1,37 @@
 """
 Tracking Page - NiceGUI
-Professional Rescue Tracking UI
+Professional Rescue Tracking UI with real-time WebSocket chat
 """
 
 import asyncio
+import json
 import requests
-from nicegui import ui
-from core.auth import require_role
+from datetime import datetime
+from nicegui import ui, app as nicegui_app
+from core.auth import require_role, get_access_token
+from core.config import BACKEND_URL
 from components.page_layout import page_layout
 from services.rescue_api import (
     get_request_detail,
     cancel_request,
-    get_chat_messages,
-    send_chat_message,
 )
+
+try:
+    import websockets
+    _HAS_WEBSOCKETS = True
+except ImportError:
+    _HAS_WEBSOCKETS = False
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _ws_url(request_id: int, token: str) -> str:
+    """Build WebSocket URL from BACKEND_URL (http→ws)."""
+    base = BACKEND_URL.replace("https://", "wss://").replace("http://", "ws://")
+    return f"{base}/ws/chat/{request_id}?token={token}"
+
 
 def get_route(start: tuple, end: tuple) -> tuple[list[list[float]], float, float]:
     """
@@ -34,21 +47,19 @@ def get_route(start: tuple, end: tuple) -> tuple[list[list[float]], float, float
         data = requests.get(url, timeout=8).json()
         route = data["routes"][0]
         coords = route["geometry"]["coordinates"]
-        distance_km = route["distance"] / 1000  # Convert meters to km
-        duration_min = route["duration"] / 60   # Convert seconds to minutes
+        distance_km = route["distance"] / 1000
+        duration_min = route["duration"] / 60
         return [[c[1], c[0]] for c in coords], distance_km, duration_min
     except Exception:
-        # Fallback: straight line with rough estimate
         import math
         lat1, lon1 = start
         lat2, lon2 = end
-        # Rough distance using Haversine (in km)
         R = 6371
         dlat = math.radians(lat2 - lat1)
         dlon = math.radians(lon2 - lon1)
         a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
         distance = R * 2 * math.asin(math.sqrt(a))
-        duration = distance / 30  # Assume ~30 km/h average
+        duration = distance / 30
         return [list(start), list(end)], distance, duration
 
 
@@ -82,10 +93,17 @@ def create_track_page() -> None:
         if not require_role("customer"):
             return
 
+        token = get_access_token()
+        if not token:
+            ui.navigate.to("/login")
+            return
+
         # ── mutable state ────────────────────────────────────────────────
         state = {
             "user_marker":    None,
             "company_marker": None,
+            "ws_task":        None,  # asyncio task for WS connection
+            "connected":      False,
         }
 
         # ────────────────────────────────────────────────────────────────
@@ -167,7 +185,7 @@ def create_track_page() -> None:
                     # CHAT card
                     with ui.card().classes(
                         "w-full rounded-[28px] shadow-lg "
-                        "border border-gray-200 p-6"
+                        "border border-gray-200 p-6 flex flex-col"
                     ):
                         with ui.row().classes(
                             "w-full items-center justify-between mb-4"
@@ -175,20 +193,28 @@ def create_track_page() -> None:
                             ui.label("Trao đổi với đội cứu hộ").classes(
                                 "text-xl font-bold font-outfit"
                             )
-                            ui.icon("chat").classes("text-primary")
+                            with ui.row().classes("items-center gap-2"):
+                                ws_status_dot = ui.icon("circle").classes(
+                                    "text-xs text-gray-400"
+                                )
+                                ws_status_label = ui.label("Đang kết nối...").classes(
+                                    "text-xs opacity-60"
+                                )
+                                ui.icon("chat").classes("text-primary")
 
-                        chat_area = ui.scroll_area().classes(
-                            "w-full h-72 rounded-2xl bg-gray-50 p-4"
-                        )
+                        # Chat messages container
+                        chat_messages_container = ui.scroll_area().classes(
+                            "w-full"
+                        ).style("height: 340px").props("visible-axis=vertical")
 
+                        # Chat input area
                         with ui.row().classes("w-full gap-3 mt-4"):
                             chat_input = ui.input(
                                 placeholder="Nhập tin nhắn..."
                             ).classes("flex-1").props("outlined rounded dense")
 
-                            ui.button(
+                            send_btn = ui.button(
                                 icon="send",
-                                on_click=lambda: asyncio.ensure_future(do_send()),
                             ).props("round unelevated color=primary")
 
                 # ── RIGHT ────────────────────────────────────────────────
@@ -214,38 +240,267 @@ def create_track_page() -> None:
                     actions_area = ui.column().classes("w-full gap-4")
 
         # ────────────────────────────────────────────────────────────────
-        # CHAT HELPERS
+        # CHAT STATE & HELPERS
         # ────────────────────────────────────────────────────────────────
 
+        chat_messages_list = []
+        chat_state = {
+            "sending": False,
+            "next_temp_id": 1,
+        }
+
+        @ui.refreshable
+        async def render_chat_messages() -> None:
+            """Render chat messages Messenger-style."""
+            if not chat_messages_list:
+                ui.label("Chưa có tin nhắn").classes("mx-auto my-8 opacity-50")
+            else:
+                for msg in chat_messages_list:
+                    is_sent = msg.get("sent", False)
+                    sender_name = "Bạn" if is_sent else msg.get("sender_name", "Đội cứu hộ")
+
+                    with ui.row().classes(
+                        "w-full items-end gap-2 mb-3" + (" justify-end" if is_sent else "")
+                    ):
+                        if not is_sent:
+                            ui.avatar(
+                                text=sender_name[0].upper() if sender_name else "?",
+                                size="sm"
+                            ).classes("text-xs bg-blue-500/20 text-blue-600")
+
+                        with ui.column().classes("gap-1 max-w-xs" + (" items-end" if is_sent else "")):
+                            with ui.row().classes("gap-2 px-3" + (" flex-row-reverse" if is_sent else "")):
+                                ui.label(sender_name).classes("text-xs font-semibold opacity-75")
+                                ui.label(msg.get("stamp", "")).classes("text-xs opacity-50")
+
+                            with ui.card().classes(
+                                "w-full rounded-3xl px-4 py-2 shadow-sm border-0 " +
+                                ("bg-blue-100 text-gray-900" if is_sent else "bg-gray-200 text-gray-900")
+                            ):
+                                ui.label(msg["message"]).classes("text-sm leading-relaxed break-words")
+
+        async def scroll_chat_to_bottom() -> None:
+            """Auto-scroll chat area to bottom."""
+            try:
+                await asyncio.sleep(0.1)
+                chat_messages_container.scroll_to(percent=1.0)
+            except Exception as e:
+                print(f"[scroll error] {e}")
+
+        def _append_message(
+            message: str,
+            sender_name: str,
+            is_me: bool,
+            stamp: str,
+            msg_id: int = None,
+            temp_id: str = None,
+        ):
+            """Thêm tin nhắn vào danh sách (tránh trùng lặp)."""
+            if msg_id is not None:
+                for m in chat_messages_list:
+                    if m.get("id") == msg_id:
+                        return
+
+            if temp_id is not None:
+                for m in chat_messages_list:
+                    if m.get("temp_id") == temp_id:
+                        return
+
+            # Gộp tin tạm optimistic với tin thật trả về từ server.
+            for m in chat_messages_list:
+                if (
+                    m["message"] == message
+                    and m.get("id") is None
+                    and m.get("sent") == is_me
+                ):
+                    if msg_id is not None:
+                        m["id"] = msg_id
+                        m["sender_name"] = sender_name
+                        if stamp:
+                            m["stamp"] = stamp
+                        m.pop("temp_id", None)
+                    return
+
+            chat_messages_list.append({
+                "id": msg_id,
+                "temp_id": temp_id,
+                "message": message,
+                "sent": is_me,
+                "sender_name": sender_name,
+                "stamp": stamp,
+            })
+
+        def _remove_temp_message(temp_id: str) -> None:
+            chat_messages_list[:] = [
+                m for m in chat_messages_list if m.get("temp_id") != temp_id
+            ]
+
+        # ────────────────────────────────────────────────────────────────
+        # WEBSOCKET CLIENT
+        # ────────────────────────────────────────────────────────────────
+
+        async def _ws_listener() -> None:
+            """
+            Kết nối WebSocket tới backend và xử lý messages.
+            Tự động reconnect nếu bị ngắt (tối đa 5 lần).
+            """
+            ws_url = _ws_url(request_id, token)
+            retry = 0
+            max_retry = 5
+
+            while retry <= max_retry:
+                try:
+                    async with websockets.connect(
+                        ws_url,
+                        ping_interval=20,
+                        ping_timeout=10,
+                        close_timeout=5,
+                    ) as ws:
+                        state["connected"] = True
+                        retry = 0  # reset on successful connect
+
+                        # Update UI: connected
+                        ws_status_dot.classes(remove="text-gray-400 text-red-500")
+                        ws_status_dot.classes(add="text-green-500")
+                        ws_status_label.set_text("Đang kết nối")
+
+                        async for raw in ws:
+                            try:
+                                data = json.loads(raw)
+                            except json.JSONDecodeError:
+                                continue
+
+                            msg_type = data.get("type")
+
+                            if msg_type == "pong":
+                                continue
+
+                            elif msg_type == "history":
+                                # Nhận lịch sử – load toàn bộ
+                                chat_messages_list.clear()
+                                for m in data.get("messages", []):
+                                    _append_message(
+                                        message=m["message"],
+                                        sender_name=m.get("sender_name", ""),
+                                        is_me=m.get("is_me", False),
+                                        stamp=m.get("created_at", ""),
+                                        msg_id=m.get("id"),
+                                    )
+                                await render_chat_messages.refresh()
+                                await scroll_chat_to_bottom()
+
+                            elif msg_type == "message":
+                                # Tin nhắn mới real-time
+                                _append_message(
+                                    message=data["message"],
+                                    sender_name=data.get("sender_name", ""),
+                                    is_me=data.get("is_me", False),
+                                    stamp=data.get("created_at", ""),
+                                    msg_id=data.get("id"),
+                                )
+                                await render_chat_messages.refresh()
+                                await scroll_chat_to_bottom()
+
+                except Exception as e:
+                    state["connected"] = False
+                    ws_status_dot.classes(remove="text-green-500 text-gray-400")
+                    ws_status_dot.classes(add="text-red-500")
+                    ws_status_label.set_text(f"Mất kết nối, thử lại ({retry+1}/{max_retry})...")
+                    print(f"[WS] Connection error: {e}")
+
+                    retry += 1
+                    if retry > max_retry:
+                        ws_status_label.set_text("Không thể kết nối real-time")
+                        break
+                    await asyncio.sleep(min(2 ** retry, 30))  # Exponential backoff
+
+        # WS task ref để cleanup
+        _ws_task_ref = {"task": None}
+
+        async def start_ws():
+            if not _HAS_WEBSOCKETS:
+                ws_status_label.set_text("⚠ websockets chưa cài – dùng polling")
+                ws_status_dot.classes(add="text-yellow-500")
+                # Fallback polling
+                ui.timer(3.0, lambda: asyncio.ensure_future(_poll_fallback()))
+                return
+            task = asyncio.ensure_future(_ws_listener())
+            _ws_task_ref["task"] = task
+
+        async def _poll_fallback():
+            """Fallback polling nếu websockets không cài được."""
+            from services.rescue_api import get_chat_messages
+            try:
+                server_msgs = await get_chat_messages(request_id)
+                if len(server_msgs) != len(chat_messages_list):
+                    chat_messages_list.clear()
+                    for msg in server_msgs:
+                        _append_message(
+                            message=msg["message"],
+                            sender_name=msg.get("sender_name", ""),
+                            is_me=msg.get("is_me", False),
+                            stamp=msg.get("created_at", ""),
+                            msg_id=msg.get("id"),
+                        )
+                    await render_chat_messages.refresh()
+            except Exception as e:
+                print(f"[poll fallback] {e}")
+
+        # ── SEND MESSAGE ─────────────────────────────────────────────────
+
         async def do_send() -> None:
+            if chat_state["sending"]:
+                return
+
             val = chat_input.value.strip()
             if not val:
                 return
-            ok = await send_chat_message(request_id, val)
-            if ok:
-                chat_input.value = ""
-                await refresh_chat()
 
-        async def refresh_chat() -> None:
-            msgs = await get_chat_messages(request_id)
-            chat_area.clear()
-            with chat_area:
-                for msg in msgs:
-                    is_me = msg.get("is_me", False)
-                    align = "items-end" if is_me else "items-start"
-                    bubble_cls = (
-                        "bg-primary text-white"
-                        if is_me
-                        else "bg-white border border-gray-200"
-                    )
-                    with ui.column().classes(f"w-full {align} mb-3"):
-                        ui.label(msg["message"]).classes(
-                            f"px-4 py-3 rounded-[22px] max-w-[75%] "
-                            f"shadow-sm leading-relaxed {bubble_cls}"
-                        )
-                        ui.label(msg.get("created_at", "")).classes(
-                            "text-[10px] opacity-50 px-2"
-                        )
+            chat_state["sending"] = True
+            send_btn.disable()
+            temp_id = f"pending-{chat_state['next_temp_id']}"
+            chat_state["next_temp_id"] += 1
+
+            # Optimistic update
+            _append_message(
+                message=val,
+                sender_name="Bạn",
+                is_me=True,
+                stamp=datetime.now().strftime("%H:%M"),
+                temp_id=temp_id,
+            )
+            chat_input.value = ""
+            await render_chat_messages.refresh()
+            await scroll_chat_to_bottom()
+
+            # Gửi qua REST API (WS server sẽ broadcast đến company)
+            from services.rescue_api import send_chat_message
+            try:
+                result = await send_chat_message(request_id, val)
+                if not result:
+                    _remove_temp_message(temp_id)
+                    await render_chat_messages.refresh()
+                    ui.notify("Gửi tin nhắn thất bại", type="negative")
+                    return
+
+                _append_message(
+                    message=result.get("content", val),
+                    sender_name="Bạn",
+                    is_me=True,
+                    stamp=datetime.now().strftime("%H:%M"),
+                    msg_id=result.get("id"),
+                )
+                await render_chat_messages.refresh()
+            except Exception as e:
+                _remove_temp_message(temp_id)
+                await render_chat_messages.refresh()
+                ui.notify(f"Lỗi: {str(e)}", type="negative")
+            finally:
+                chat_state["sending"] = False
+                send_btn.enable()
+
+        send_btn.on_click(lambda: asyncio.ensure_future(do_send()))
+        chat_input.on("keydown.enter", lambda: asyncio.ensure_future(do_send()))
 
         # ────────────────────────────────────────────────────────────────
         # MAP UPDATE
@@ -255,36 +510,26 @@ def create_track_page() -> None:
             user_pos = (req["latitude"], req["longitude"])
             company_pos = None
             if req.get("company_latitude"):
-                company_pos = (
-                    req["company_latitude"],
-                    req["company_longitude"],
-                )
+                company_pos = (req["company_latitude"], req["company_longitude"])
 
-            # User marker
             if state["user_marker"] is None:
                 state["user_marker"] = map_widget.marker(latlng=user_pos)
             else:
                 state["user_marker"].move(*user_pos)
 
-            # Company marker + route
             if company_pos:
                 if state["company_marker"] is None:
-                    state["company_marker"] = map_widget.marker(
-                        latlng=company_pos
-                    )
+                    state["company_marker"] = map_widget.marker(latlng=company_pos)
                 else:
                     state["company_marker"].move(*company_pos)
 
-                # Run OSRM in a thread to get route + metrics
                 route_points, distance_km, duration_min = await asyncio.get_event_loop().run_in_executor(
                     None, get_route, company_pos, user_pos
                 )
 
-                # Update distance and ETA labels
                 distance_label.set_text(f"{distance_km:.1f} km")
                 eta_label.set_text(f"ETA: {int(duration_min)} phút")
 
-                # Draw route line (red polyline like Google Maps)
                 await ui.run_javascript(
                     f"""
                     (function() {{
@@ -292,17 +537,13 @@ def create_track_page() -> None:
                         if (!el) return;
                         var map = el._leaflet_map ?? el.leaflet ?? el._map;
                         if (!map) return;
-
-                        // Remove old route if exists
                         if (window._rescueRoute) {{
                             map.removeLayer(window._rescueRoute);
                             window._rescueRoute = null;
                         }}
-
-                        // Draw red polyline from company to user
                         window._rescueRoute = L.polyline(
                             {route_points},
-                            {{ 
+                            {{
                                 color: '#dc2626',
                                 weight: 8,
                                 opacity: 0.9,
@@ -310,8 +551,6 @@ def create_track_page() -> None:
                                 lineJoin: 'round'
                             }}
                         ).addTo(map);
-
-                        // Fit map to show entire route
                         map.fitBounds(
                             window._rescueRoute.getBounds(),
                             {{ padding: [60, 60] }}
@@ -351,21 +590,15 @@ def create_track_page() -> None:
             company_info.clear()
             with company_info:
                 if not req.get("company_name"):
-                    ui.label("Đang chờ đơn vị cứu hộ...").classes(
-                        "italic opacity-50"
-                    )
+                    ui.label("Đang chờ đơn vị cứu hộ...").classes("italic opacity-50")
                     return
 
                 ui.label("Đơn Vị Cứu Hộ").classes("text-xl font-bold mb-5")
 
                 with ui.row().classes("items-center gap-4"):
-                    ui.avatar(icon="business").classes(
-                        "bg-primary/10 text-primary"
-                    )
+                    ui.avatar(icon="business").classes("bg-primary/10 text-primary")
                     with ui.column().classes("gap-0"):
-                        ui.label(req["company_name"]).classes(
-                            "font-bold text-lg"
-                        )
+                        ui.label(req["company_name"]).classes("font-bold text-lg")
                         ui.label(
                             f"Hotline: {req.get('company_hotline', '--')}"
                         ).classes("text-sm text-primary")
@@ -376,8 +609,7 @@ def create_track_page() -> None:
                     icon="phone",
                     on_click=lambda: ui.navigate.to(f"tel:{hotline}"),
                 ).classes(
-                    "w-full mt-6 bg-green-600 text-white "
-                    "rounded-2xl font-bold py-4"
+                    "w-full mt-6 bg-green-600 text-white rounded-2xl font-bold py-4"
                 )
 
         # ────────────────────────────────────────────────────────────────
@@ -391,35 +623,34 @@ def create_track_page() -> None:
                     ui.button(
                         "HỦY YÊU CẦU",
                         icon="cancel",
-                        on_click=lambda: asyncio.ensure_future(
-                            confirm_cancel()
-                        ),
+                        on_click=confirm_cancel,
                     ).classes("w-full rounded-2xl font-bold py-4").props(
                         "outline color=negative"
                     )
 
         async def confirm_cancel() -> None:
-            with ui.dialog() as dlg, ui.card().classes(
-                "p-8 rounded-[28px] w-[420px]"
-            ):
-                ui.label("Xác nhận hủy yêu cầu?").classes(
-                    "text-2xl font-bold mb-2"
-                )
-                ui.label("Đơn cứu hộ sẽ bị dừng ngay lập tức.").classes(
-                    "mb-6 opacity-70"
-                )
+            with ui.dialog() as dlg, ui.card().classes("p-8 rounded-[28px] w-[420px]"):
+                ui.label("Xác nhận hủy yêu cầu?").classes("text-2xl font-bold mb-2")
+                ui.label("Đơn cứu hộ sẽ bị dừng ngay lập tức.").classes("mb-6 opacity-70")
                 with ui.row().classes("w-full justify-end gap-3"):
-                    ui.button("Đóng", on_click=dlg.close).props("flat")
-
+                    ui.button("Đóng", on_click=dlg.close).props("flat").classes(
+                    "rounded-xl px-5 py-2 font-medium"
+                )
                     async def do_cancel() -> None:
-                        ok = await cancel_request(request_id)
-                        if ok:
+                        try:
+                            data = await cancel_request(request_id)
                             ui.notify("Đã hủy yêu cầu", type="info")
                             dlg.close()
                             await update_ui()
+                            if data.get("status") == "CANCELLED":
+                                status_chip.set_text("CANCELLED")
+                        except Exception as e:
+                            ui.notify(f"Lỗi: {str(e)}", type="negative")
 
                     ui.button("HỦY NGAY", on_click=do_cancel).classes(
-                        "bg-red-500 text-white"
+                       "bg-red-600 hover:bg-red-700 "
+                        "text-white rounded-xl px-6 py-2 "
+                        "font-bold transition-all"
                     )
             dlg.open()
 
@@ -432,37 +663,32 @@ def create_track_page() -> None:
                 req = await get_request_detail(request_id)
             except Exception:
                 return
-
             if not req:
                 return
 
-            # Status chip
             status_chip.set_text(req["status"])
-            status_chip.props(
-                f"color={STATUS_COLORS.get(req['status'], 'grey')}"
-            )
+            status_chip.props(f"color={STATUS_COLORS.get(req['status'], 'grey')}")
 
-            # Map (errors are swallowed so the timer keeps running)
             try:
                 await update_map(req)
             except Exception as exc:
                 print(f"[track] map update error: {exc}")
 
-            # Side-panel widgets
             render_timeline(req)
             render_company(req)
             render_actions(req)
 
         # ────────────────────────────────────────────────────────────────
-        # TIMERS
+        # TIMERS & CLEANUP
         # ────────────────────────────────────────────────────────────────
 
         update_timer = ui.timer(5.0, update_ui)
-        chat_timer   = ui.timer(3.0, refresh_chat)
 
         def cleanup() -> None:
             update_timer.deactivate()
-            chat_timer.deactivate()
+            task = _ws_task_ref.get("task")
+            if task and not task.done():
+                task.cancel()
 
         ui.context.client.on_disconnect(cleanup)
 
@@ -471,4 +697,10 @@ def create_track_page() -> None:
         # ────────────────────────────────────────────────────────────────
 
         await update_ui()
-        await refresh_chat()
+
+        # Render empty chat container (WS sẽ load history)
+        with chat_messages_container:
+            await render_chat_messages()
+
+        # Khởi động WebSocket listener
+        await start_ws()

@@ -331,9 +331,10 @@ def get_request_detail(
     if req.assignment:
         staff = db.query(RescueStaff).filter(RescueStaff.id == req.assignment.staff_id).first()
         r_vehicle = db.query(RescueVehicle).filter(RescueVehicle.id == req.assignment.rescue_vehicle_id).first()
+        staff_name = f"Nhân viên #{staff.id} - {staff.skill_level}" if staff else None
         assignment_data = {
             "staff_id": staff.id if staff else None,
-            "staff_name": staff.user.full_name if (staff and staff.user) else None,
+            "staff_name": staff_name,
             "rescue_vehicle_id": r_vehicle.id if r_vehicle else None,
             "rescue_vehicle_plate": r_vehicle.plate_number if r_vehicle else None,
             "assigned_time": req.assignment.assigned_time.isoformat() if req.assignment.assigned_time else None

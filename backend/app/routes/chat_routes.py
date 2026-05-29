@@ -16,8 +16,28 @@ router = APIRouter(prefix="/chat", tags=["Chat & Communication"])
 # Messages
 # ──────────────────────────────────────────────────────────────────────────────
 
+async def _broadcast_ws_message(request_id: int, msg):
+    try:
+        from app.routes.ws_routes import manager, _get_sender_display_name
+        from datetime import timedelta
+        local_time = msg.sent_time + timedelta(hours=7)
+        created_at_str = local_time.strftime("%H:%M %d/%m")
+        sender_name = _get_sender_display_name(msg)
+        await manager.broadcast_chat_message(
+            request_id=request_id,
+            message_id=msg.id,
+            content=msg.content,
+            sender_id=msg.sender_id,
+            sender_name=sender_name,
+            created_at=created_at_str,
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to broadcast WS chat message: {e}", exc_info=True)
+
+
 @router.post("/messages", response_model=dict)
-def send_message(
+async def send_message(
     msg_data: MessageCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(auth_svc.get_current_user_from_token),
@@ -39,6 +59,7 @@ def send_message(
             raise HTTPException(status_code=403, detail="Không có quyền gửi tin nhắn")
 
     msg = chat_svc.send_message(db, user_id, msg_data)
+    await _broadcast_ws_message(msg_data.request_id, msg)
     return success_response(data=MessageResponse.from_orm(msg), message="Đã gửi tin nhắn")
 
 @router.get("/messages/{request_id}", response_model=dict)
@@ -88,16 +109,18 @@ def get_chat_by_request(
 
     messages = chat_svc.get_messages_by_request(db, request_id)
     result = []
+    from datetime import timedelta
     for m in messages:
         msg_dict = MessageResponse.from_orm(m).dict()
         msg_dict["is_me"] = m.sender_id == user_id
         msg_dict["message"] = m.content
-        msg_dict["created_at"] = m.sent_time.strftime("%H:%M %d/%m")
+        local_time = m.sent_time + timedelta(hours=7)
+        msg_dict["created_at"] = local_time.strftime("%H:%M %d/%m")
         result.append(msg_dict)
     return success_response(data=result)
 
 @router.post("/{request_id}", response_model=dict)
-def send_chat_by_request(
+async def send_chat_by_request(
     request_id: int,
     message: str = Query(...),
     db: Session = Depends(get_db),
@@ -128,6 +151,7 @@ def send_chat_by_request(
         content=message
     )
     msg = chat_svc.send_message(db, user_id, msg_data)
+    await _broadcast_ws_message(request_id, msg)
     return success_response(data=MessageResponse.from_orm(msg).dict(), message="Đã gửi tin nhắn")
 
 # ──────────────────────────────────────────────────────────────────────────────

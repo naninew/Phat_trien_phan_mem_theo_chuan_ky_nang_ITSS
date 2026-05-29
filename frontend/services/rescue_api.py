@@ -94,6 +94,8 @@ async def get_request_detail(request_id: int) -> Optional[Dict[str, Any]]:
 
 async def cancel_request(request_id: int) -> Dict[str, Any]:
     r = await api_client.post(f"/rescue/requests/{request_id}/cancel")
+    if not r.get("success"):
+        raise RuntimeError(r.get("message") or "Không thể hủy yêu cầu")
     return r.get("data", {})
 
 
