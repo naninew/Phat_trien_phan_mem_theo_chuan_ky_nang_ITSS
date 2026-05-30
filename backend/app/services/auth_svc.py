@@ -179,4 +179,31 @@ def update_user_status(db: Session, user_id: int, status: AccountStatus) -> Opti
     db.commit()
     db.refresh(user)
     
-    return user
+
+def update_user_password(db: Session, user_id: int, current_password: str, new_password: str) -> Tuple[bool, str]:
+    """
+    Update user password after verifying current password.
+    
+    Args:
+        db: Database session
+        user_id: User ID
+        current_password: Current password (plain text)
+        new_password: New password (plain text)
+    
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    user = get_user_by_id(db, user_id)
+    if not user:
+        return False, "User not found"
+    
+    # Verify current password
+    if not verify_password(current_password, user.password_hash):
+        return False, "Current password is incorrect"
+    
+    # Hash and update new password
+    user.password_hash = hash_password(new_password)
+    db.commit()
+    db.refresh(user)
+    
+    return True, "Password updated successfully"

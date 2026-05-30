@@ -116,3 +116,33 @@ def mark_helpful(
     if not ok:
         raise HTTPException(status_code=404, detail="Không tìm thấy phản hồi")
     return success_response(data={}, message="Đã đánh dấu hữu ích")
+@router.put("/posts/{post_id}", response_model=dict)
+def update_post(
+    post_id: int,
+    post_data: PostUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    post = community_svc.update_post(
+        db,
+        post_id,
+        current_user["user_id"],
+        post_data
+    )
+
+    if not post:
+        raise HTTPException(
+            status_code=404,
+            detail="Không tìm thấy bài đăng hoặc bạn không có quyền sửa"
+        )
+
+    return success_response(
+        data={
+            "id": post.id,
+            "title": post.title,
+            "content": post.content,
+            "is_closed": post.is_closed,
+            "updated_at": post.updated_at.isoformat() if post.updated_at else None,
+        },
+        message="Cập nhật bài đăng thành công"
+    )

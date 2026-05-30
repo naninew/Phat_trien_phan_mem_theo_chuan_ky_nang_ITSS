@@ -68,3 +68,25 @@ class UserResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class PasswordUpdate(BaseModel):
+    """Schema for password update."""
+    current_password: str = Field(..., min_length=6, max_length=128)
+    new_password: str = Field(..., min_length=6, max_length=128)
+    confirm_password: str = Field(..., min_length=6, max_length=128)
+    
+    @validator('confirm_password')
+    def passwords_match(cls, v, values):
+        if 'new_password' in values and v != values['new_password']:
+            raise ValueError('Passwords do not match')
+        return v
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "current_password": "oldpassword123",
+                "new_password": "newpassword456",
+                "confirm_password": "newpassword456"
+            }
+        }

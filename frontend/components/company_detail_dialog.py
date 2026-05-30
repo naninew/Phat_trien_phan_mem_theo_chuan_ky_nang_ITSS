@@ -572,7 +572,6 @@ def open_company_detail(company_id: int):
         dialog.open()
 
         await _load_details()
-
     ui.timer(
         0.1,
         start,
