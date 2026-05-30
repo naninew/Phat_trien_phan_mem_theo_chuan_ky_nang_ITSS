@@ -28,4 +28,17 @@ async def create_reply(post_id: int, content: str) -> Dict[str, Any]:
 
 async def mark_reply_helpful(reply_id: int) -> bool:
     r = await api_client.put(f"/community/replies/{reply_id}/helpful")
-    return r.get("success", False)
+    return r.get("success") is True
+async def close_post(post_id: int):
+    # token = get_access_token()
+    # headers = {"Authorization": f"Bearer {token}"}
+
+    # async with httpx.AsyncClient() as client:
+        r = await api_client.put(
+            f"/community/posts/{post_id}",
+             data={"is_closed": True},
+            # headers=headers,
+            # timeout=10,
+        )
+
+        return r.get("success") is True

@@ -71,3 +71,33 @@ async def get_current_user(token: str) -> Optional[Dict[str, Any]]:
         return response.get("data")
     except Exception:
         return None
+
+
+async def update_password(
+    current_password: str,
+    new_password: str,
+    confirm_password: str,
+    token: str
+) -> Dict[str, Any]:
+    """
+    Update user password.
+    
+    Args:
+        current_password: Current password
+        new_password: New password
+        confirm_password: Confirm new password
+        token: Access token
+    
+    Returns:
+        Dictionary with update result
+    """
+    response = await api_client.put(
+        "/profile/me/password",
+        data={
+            "current_password": current_password,
+            "new_password": new_password,
+            "confirm_password": confirm_password,
+        },
+        token=token,
+    )
+    return response.get("data", {})

@@ -1,7 +1,6 @@
 """
 Customer Dashboard – Professional UI Version
 """
-
 from nicegui import ui
 import httpx
 from core.auth import get_access_token, require_role
@@ -115,7 +114,7 @@ def create_customer_dashboard():
                 bg-white
             """).on(
                 'click',
-                lambda: open_company_detail(c['id'])
+                 lambda: open_company_detail(c['id'])
             ):
 
                 with ui.row().classes("""

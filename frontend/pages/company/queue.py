@@ -1,20 +1,36 @@
 """
 Company Queue Management - NiceGUI
+Includes embedded real-time chat panel per request (WebSocket)
 """
-from nicegui import ui
-from typing import Optional, Dict, Any, List
+import asyncio
+import json
 from datetime import datetime
-from core.auth import require_role
+from nicegui import ui, app as nicegui_app
+from typing import Optional, Dict, Any, List
+from core.auth import require_role, get_access_token
+from core.config import BACKEND_URL
 from components.page_layout import page_layout
 from services.rescue_api import (
-    get_company_queue, 
-    accept_request, 
+    get_company_queue,
+    accept_request,
     reject_request,
-    update_request_status, 
+    update_request_status,
     get_my_vehicles,
     get_company_staff,
-    assign_request
+    assign_request,
 )
+
+try:
+    import websockets
+    _HAS_WEBSOCKETS = True
+except ImportError:
+    _HAS_WEBSOCKETS = False
+
+
+def _ws_url(request_id: int, token: str) -> str:
+    base = BACKEND_URL.replace("https://", "wss://").replace("http://", "ws://")
+    return f"{base}/ws/chat/{request_id}?token={token}"
+
 
 def create_queue_page():
     """Register /company/queue route."""
@@ -24,14 +40,24 @@ def create_queue_page():
         if not require_role("company_staff"):
             return
 
+        token = get_access_token()
+
+        # ── Chat State (per open dialog) ─────────────────────────────────────
+        # Stores active WS tasks so we can cancel when dialog closes
+        active_chat_tasks: Dict[int, asyncio.Task] = {}
+
         with page_layout("/company/queue", title="Hàng Đợi Cứu Hộ"):
-            
+
             with ui.row().classes("w-full items-center justify-between mb-6"):
                 with ui.column().classes("gap-0"):
-                    ui.label("📊 Hàng Đợi Yêu Cầu").classes("text-3xl font-bold font-outfit text-primary")
+                    ui.label("📊 Hàng Đợi Yêu Cầu").classes(
+                        "text-3xl font-bold font-outfit text-primary"
+                    )
                     ui.label("Tiếp nhận và điều phối nhân sự, phương tiện").classes("opacity-60")
-                
-                refresh_btn = ui.button(icon="refresh", on_click=lambda: _load_data()).props("flat round color=primary")
+
+                refresh_btn = ui.button(
+                    icon="refresh", on_click=lambda: _load_data()
+                ).props("flat round color=primary")
 
             # Filters
             with ui.row().classes("w-full items-center gap-4 bg-surface-variant/5 p-4 rounded-2xl mb-6"):
@@ -53,8 +79,8 @@ def create_queue_page():
             # Main Queue List
             queue_container = ui.column().classes("w-full gap-4")
 
-        # ── Logic ────────────────────────────────────────────────────────
-        
+        # ── Logic ─────────────────────────────────────────────────────────────
+
         async def _load_data():
             refresh_btn.props("loading")
             queue_container.clear()
@@ -62,7 +88,7 @@ def create_queue_page():
                 queue = await get_company_queue(status_filter.value)
                 vehicles = await get_my_vehicles()
                 staff = await get_company_staff()
-                
+
                 with queue_container:
                     if not queue:
                         ui.label("Hàng đợi trống.").classes("italic opacity-50 py-20 self-center")
@@ -73,39 +99,294 @@ def create_queue_page():
             finally:
                 refresh_btn.props(remove="loading")
 
+        # ──────────────────────────────────────────────────────────────────────
+        # CHAT PANEL (embedded in dialog)
+        # ──────────────────────────────────────────────────────────────────────
+
+        async def _open_chat_dialog(req_id: int, customer_name: str):
+            """Mở dialog chat với customer của request req_id."""
+
+            # Nếu đã có dialog cho request này, không mở thêm
+            chat_messages: List[Dict] = []
+
+            def _append_message(message: str, sender_name: str, is_me: bool, stamp: str, msg_id: int = None):
+                """Thêm tin nhắn vào danh sách (tránh trùng lặp)."""
+                if msg_id is not None:
+                    # Tránh trùng lặp nếu đã tồn tại ID này
+                    for m in chat_messages:
+                        if m.get("id") == msg_id:
+                            return
+                    # Gán ID thực tế từ server cho tin nhắn tạm thời (optimistic update) nếu trùng nội dung và người gửi
+                    for m in chat_messages:
+                        if m.get("id") is None and m["message"] == message and m["sent"] == is_me:
+                            m["id"] = msg_id
+                            if stamp:
+                                m["stamp"] = stamp
+                            return
+
+                chat_messages.append({
+                    "id": msg_id,
+                    "message": message,
+                    "sent": is_me,
+                    "sender_name": sender_name,
+                    "stamp": stamp,
+                })
+
+            with ui.dialog() as chat_dlg, ui.card().classes(
+                "w-[520px] rounded-3xl p-0 overflow-hidden"
+            ):
+                # Header
+                with ui.row().classes(
+                    "w-full items-center justify-between px-6 py-4 "
+                    "bg-primary text-white"
+                ):
+                    with ui.row().classes("items-center gap-3"):
+                        ui.icon("chat_bubble").classes("text-white")
+                        with ui.column().classes("gap-0"):
+                            ui.label(f"Chat – Yêu cầu #{req_id}").classes(
+                                "font-bold text-lg"
+                            )
+                            ws_status_lbl = ui.label("Đang kết nối...").classes(
+                                "text-xs opacity-80"
+                            )
+
+                    ui.button(icon="close", on_click=chat_dlg.close).props(
+                        "flat round dense"
+                    ).classes("text-white")
+
+                # Messages area
+                msg_scroll = ui.scroll_area().classes("w-full px-4 pt-4").style(
+                    "height: 380px"
+                ).props("visible-axis=vertical")
+
+                # Input row
+                with ui.row().classes("w-full items-center gap-3 px-4 py-4 border-t"):
+                    chat_inp = ui.input(
+                        placeholder="Nhập tin nhắn..."
+                    ).classes("flex-1").props("outlined rounded dense")
+                    chat_send_btn = ui.button(icon="send").props(
+                        "round unelevated color=primary"
+                    )
+
+            # ── Refreshable message renderer ─────────────────────────────────
+
+            @ui.refreshable
+            async def _render_msgs():
+                if not chat_messages:
+                    ui.label("Chưa có tin nhắn").classes("text-center my-8 opacity-50")
+                    return
+                for msg in chat_messages:
+                    is_me = msg.get("sent", False)
+                    name = "Bạn" if is_me else msg.get("sender_name", customer_name)
+
+                    with ui.row().classes(
+                        "w-full items-end gap-2 mb-2" + (" justify-end" if is_me else "")
+                    ):
+                        if not is_me:
+                            ui.avatar(
+                                text=name[0].upper() if name else "?", size="sm"
+                            ).classes("text-xs bg-orange-100 text-orange-600")
+
+                        with ui.column().classes(
+                            "gap-0.5 max-w-[280px]" + (" items-end" if is_me else "")
+                        ):
+                            with ui.row().classes(
+                                "gap-2 px-3" + (" flex-row-reverse" if is_me else "")
+                            ):
+                                ui.label(name).classes("text-xs font-semibold opacity-70")
+                                ui.label(msg.get("stamp", "")).classes("text-xs opacity-40")
+
+                            with ui.card().classes(
+                                "rounded-3xl px-4 py-2 shadow-sm border-0 " +
+                                ("bg-primary text-white" if is_me else "bg-gray-100 text-gray-800")
+                            ):
+                                ui.label(msg["message"]).classes(
+                                    "text-sm leading-relaxed break-words"
+                                )
+
+            async def _scroll_bottom():
+                try:
+                    await asyncio.sleep(0.1)
+                    msg_scroll.scroll_to(percent=1.0)
+                except Exception as e:
+                    print(f"[scroll error] {e}")
+
+            # ── Send handler ─────────────────────────────────────────────────
+
+            async def _do_send():
+                val = chat_inp.value.strip()
+                if not val:
+                    return
+
+                # Optimistic
+                _append_message(
+                    message=val,
+                    sender_name="Bạn",
+                    is_me=True,
+                    stamp=datetime.now().strftime("%H:%M"),
+                )
+                chat_inp.value = ""
+                await _render_msgs.refresh()
+                await _scroll_bottom()
+
+                # Gửi REST API
+                from services.rescue_api import send_chat_message
+                try:
+                    result = await send_chat_message(req_id, val)
+                    if not result:
+                        chat_messages.pop()
+                        await _render_msgs.refresh()
+                        ui.notify("Gửi thất bại", type="negative")
+                except Exception as e:
+                    chat_messages.pop()
+                    await _render_msgs.refresh()
+                    ui.notify(f"Lỗi: {e}", type="negative")
+
+            chat_send_btn.on_click(lambda: asyncio.ensure_future(_do_send()))
+            chat_inp.on("keydown.enter", lambda: asyncio.ensure_future(_do_send()))
+
+            # ── WebSocket listener ───────────────────────────────────────────
+
+            async def _ws_listener():
+                ws_url = _ws_url(req_id, token)
+                retry = 0
+                max_retry = 5
+
+                while retry <= max_retry:
+                    try:
+                        async with websockets.connect(
+                            ws_url,
+                            ping_interval=20,
+                            ping_timeout=10,
+                            close_timeout=5,
+                        ) as ws:
+                            retry = 0
+                            ws_status_lbl.set_text("Real-time ✓")
+
+                            async for raw in ws:
+                                try:
+                                    data = json.loads(raw)
+                                except json.JSONDecodeError:
+                                    continue
+
+                                t = data.get("type")
+                                if t == "pong":
+                                    continue
+                                elif t == "history":
+                                    chat_messages.clear()
+                                    for m in data.get("messages", []):
+                                        _append_message(
+                                            message=m["message"],
+                                            sender_name=m.get("sender_name", ""),
+                                            is_me=m.get("is_me", False),
+                                            stamp=m.get("created_at", ""),
+                                            msg_id=m.get("id"),
+                                        )
+                                    with msg_scroll:
+                                        await _render_msgs()
+                                    await _scroll_bottom()
+                                elif t == "message":
+                                    _append_message(
+                                        message=data["message"],
+                                        sender_name=data.get("sender_name", ""),
+                                        is_me=data.get("is_me", False),
+                                        stamp=data.get("created_at", ""),
+                                        msg_id=data.get("id"),
+                                    )
+                                    await _render_msgs.refresh()
+                                    await _scroll_bottom()
+
+                    except asyncio.CancelledError:
+                        return
+                    except Exception as e:
+                        retry += 1
+                        ws_status_lbl.set_text(f"Mất kết nối ({retry}/{max_retry})...")
+                        if retry > max_retry:
+                            ws_status_lbl.set_text("Không kết nối được")
+                            break
+                        await asyncio.sleep(min(2 ** retry, 30))
+
+            # Khởi động WebSocket (chỉ khi websockets cài được)
+            ws_task = None
+            if _HAS_WEBSOCKETS and token:
+                ws_task = asyncio.ensure_future(_ws_listener())
+                active_chat_tasks[req_id] = ws_task
+            else:
+                ws_status_lbl.set_text("Polling mode")
+                # Fallback: load history 1 lần
+                from services.rescue_api import get_chat_messages
+                try:
+                    msgs = await get_chat_messages(req_id)
+                    chat_messages.clear()
+                    for m in msgs:
+                        _append_message(
+                            message=m["message"],
+                            sender_name=m.get("sender_name", ""),
+                            is_me=m.get("is_me", False),
+                            stamp=m.get("created_at", ""),
+                            msg_id=m.get("id"),
+                        )
+                except Exception:
+                    pass
+
+            # Render lần đầu (WS sẽ override qua history event)
+            with msg_scroll:
+                await _render_msgs()
+
+            # Cleanup khi dialog đóng
+            def _on_close():
+                if ws_task and not ws_task.done():
+                    ws_task.cancel()
+                active_chat_tasks.pop(req_id, None)
+
+            chat_dlg.on("hide", lambda: _on_close())
+            chat_dlg.open()
+
+        # ── Queue Item renderer ────────────────────────────────────────────────
+
         def _render_queue_item(r, vehicles, staff):
             status_map = {
-                "PENDING":     ("MỚI", "warning"),
-                "ACCEPTED":    ("ĐÃ NHẬN", "info"),
+                "PENDING":     ("MỚI",       "warning"),
+                "ACCEPTED":    ("ĐÃ NHẬN",   "info"),
                 "ASSIGNED":    ("PHÂN CÔNG", "indigo"),
                 "ON_THE_WAY":  ("DI CHUYỂN", "primary"),
-                "IN_PROGRESS": ("XỬ LÝ", "secondary"),
-                "COMPLETED":   ("XONG", "positive"),
-                "REJECTED":    ("TỪ CHỐI", "error"),
-                "CANCELLED":   ("HỦY", "gray"),
+                "IN_PROGRESS": ("XỬ LÝ",     "secondary"),
+                "COMPLETED":   ("XONG",      "positive"),
+                "REJECTED":    ("TỪ CHỐI",   "error"),
+                "CANCELLED":   ("HỦY",       "gray"),
             }
             label, color = status_map.get(r['status'], (r['status'], "gray"))
+            customer_name = r.get('customer_name', 'Khách hàng')
 
-            with ui.card().classes("w-full rounded-3xl p-6 border border-surface-variant/30 shadow-sm hover:shadow-md transition-all"):
+            with ui.card().classes(
+                "w-full rounded-3xl p-6 border border-surface-variant/30 "
+                "shadow-sm hover:shadow-md transition-all"
+            ):
                 with ui.row().classes("w-full justify-between items-start"):
                     with ui.column().classes("gap-1 flex-1"):
                         with ui.row().classes("items-center gap-3"):
                             ui.label(f"#{r['id']}").classes("font-bold opacity-30 text-sm")
                             ui.badge(label, color=color).classes("rounded-full px-3")
-                        
-                        ui.label(r.get('service_name', 'Dịch vụ cứu hộ')).classes("text-2xl font-bold font-outfit mt-2")
-                        
+
+                        ui.label(r.get('service_name', 'Dịch vụ cứu hộ')).classes(
+                            "text-2xl font-bold font-outfit mt-2"
+                        )
+
                         with ui.row().classes("items-center gap-4 mt-2"):
                             with ui.row().classes("items-center gap-2"):
                                 ui.icon("person", size="sm").classes("opacity-50")
-                                ui.label(r.get('customer_name', 'N/A')).classes("font-medium")
+                                ui.label(customer_name).classes("font-medium")
                             with ui.row().classes("items-center gap-2 text-primary font-bold"):
                                 ui.icon("phone", size="sm")
                                 ui.label(r.get('customer_phone', 'N/A'))
-                    
+
                     with ui.column().classes("items-end"):
-                        ui.label("Vị trí yêu cầu:").classes("text-[10px] uppercase font-bold opacity-50")
-                        ui.label(r.get('address_description', 'N/A')).classes("text-sm text-right max-w-xs")
+                        ui.label("Vị trí yêu cầu:").classes(
+                            "text-[10px] uppercase font-bold opacity-50"
+                        )
+                        ui.label(r.get('address_description', 'N/A')).classes(
+                            "text-sm text-right max-w-xs"
+                        )
 
                 ui.separator().classes("my-6 opacity-30")
 
@@ -119,41 +400,73 @@ def create_queue_page():
                                 _info_chip("local_shipping", assignment['rescue_vehicle_plate'])
                             if assignment.get('staff_name'):
                                 _info_chip("person_pin", assignment['staff_name'])
-                        elif r.get('rescue_vehicle_plate') or r.get('staff_name'): # Fallback for old API structure
-                             if r.get('rescue_vehicle_plate'): _info_chip("local_shipping", r['rescue_vehicle_plate'])
-                             if r.get('staff_name'): _info_chip("person_pin", r['staff_name'])
+                        elif r.get('rescue_vehicle_plate') or r.get('staff_name'):
+                            if r.get('rescue_vehicle_plate'):
+                                _info_chip("local_shipping", r['rescue_vehicle_plate'])
+                            if r.get('staff_name'):
+                                _info_chip("person_pin", r['staff_name'])
 
-                    # Status Actions
-                    with ui.row().classes("gap-3"):
+                    # Actions row
+                    with ui.row().classes("gap-3 items-center"):
+                        # 💬 Chat button – chỉ hiện khi đã nhận request
+                        if r['status'] not in ('PENDING', 'CANCELLED', 'REJECTED'):
+                            ui.button(
+                                "Chat",
+                                icon="chat_bubble_outline",
+                                on_click=lambda req_id=r['id'], cname=customer_name: (
+                                    asyncio.ensure_future(_open_chat_dialog(req_id, cname))
+                                ),
+                            ).props("flat color=primary").classes("font-bold")
+
+                        # Status Actions
                         if r['status'] == 'PENDING':
-                            ui.button("TỪ CHỐI", on_click=lambda: _do_reject(r['id'])).props("flat color=error")
-                            ui.button("TIẾP NHẬN", icon="check", on_click=lambda: _do_accept(r['id'])) \
-                                .classes("bg-primary text-white font-bold rounded-xl px-6 py-3")
-                        
+                            ui.button(
+                                "TỪ CHỐI",
+                                on_click=lambda: _do_reject(r['id'])
+                            ).props("flat color=error")
+                            ui.button(
+                                "TIẾP NHẬN",
+                                icon="check",
+                                on_click=lambda: _do_accept(r['id'])
+                            ).classes("bg-primary text-white font-bold rounded-xl px-6 py-3")
+
                         elif r['status'] == 'ACCEPTED':
-                            ui.button("PHÂN CÔNG", icon="assignment", on_click=lambda: _show_assign_dialog(r, vehicles, staff)) \
-                                .classes("bg-indigo-600 text-white font-bold rounded-xl px-6")
-                        
+                            ui.button(
+                                "PHÂN CÔNG",
+                                icon="assignment",
+                                on_click=lambda: _show_assign_dialog(r, vehicles, staff)
+                            ).classes("bg-indigo-600 text-white font-bold rounded-xl px-6")
+
                         elif r['status'] == 'ASSIGNED':
-                            ui.button("BẮT ĐẦU DI CHUYỂN", icon="navigation", on_click=lambda: _update_status(r['id'], 'ON_THE_WAY')) \
-                                .classes("bg-primary text-white font-bold rounded-xl px-6")
-                        
+                            ui.button(
+                                "BẮT ĐẦU DI CHUYỂN",
+                                icon="navigation",
+                                on_click=lambda: _update_status(r['id'], 'ON_THE_WAY')
+                            ).classes("bg-primary text-white font-bold rounded-xl px-6")
+
                         elif r['status'] == 'ON_THE_WAY':
-                            ui.button("ĐÃ ĐẾN HIỆN TRƯỜNG", icon="place", on_click=lambda: _update_status(r['id'], 'IN_PROGRESS')) \
-                                .classes("bg-secondary text-white font-bold rounded-xl px-6")
-                        
+                            ui.button(
+                                "ĐÃ ĐẾN HIỆN TRƯỜNG",
+                                icon="place",
+                                on_click=lambda: _update_status(r['id'], 'IN_PROGRESS')
+                            ).classes("bg-secondary text-white font-bold rounded-xl px-6")
+
                         elif r['status'] == 'IN_PROGRESS':
-                            ui.button("XÁC NHẬN HOÀN THÀNH", icon="check_circle", on_click=lambda: _show_complete_dialog(r)) \
-                                .classes("bg-positive text-white font-bold rounded-xl px-6")
+                            ui.button(
+                                "XÁC NHẬN HOÀN THÀNH",
+                                icon="check_circle",
+                                on_click=lambda: _show_complete_dialog(r)
+                            ).classes("bg-positive text-white font-bold rounded-xl px-6")
 
         def _info_chip(icon, text):
-            with ui.row().classes("items-center gap-2 bg-surface-variant/10 px-3 py-1.5 rounded-full"):
+            with ui.row().classes(
+                "items-center gap-2 bg-surface-variant/10 px-3 py-1.5 rounded-full"
+            ):
                 ui.icon(icon, size="1rem").classes("text-primary")
                 ui.label(text).classes("text-xs font-bold")
 
         async def _do_accept(req_id):
             try:
-                # Backend accept_request takes eta_minutes
                 await accept_request(req_id, eta_minutes=20)
                 ui.notify("Đã tiếp nhận yêu cầu", type="positive")
                 await _load_data()
@@ -162,16 +475,28 @@ def create_queue_page():
 
         async def _show_assign_dialog(req, vehicles, staff):
             with ui.dialog() as d, ui.card().classes("p-8 rounded-3xl w-[450px]"):
-                ui.label("Phân công cứu hộ").classes("text-2xl font-bold mb-6 font-outfit text-primary")
-                
-                v_opts = {v['id']: f"{v['plate_number']} ({v['vehicle_type']})" for v in vehicles if v['status'] == 'available'}
-                v_sel = ui.select(v_opts, label="Chọn Phương Tiện").classes("w-full mb-4").props("outlined rounded")
-                
-                s_opts = {s['id']: f"NV #{s['id']} (Level {s['skill_level']})" for s in staff if s['status'] == 'AVAILABLE'}
-                s_sel = ui.select(s_opts, label="Chọn Nhân Viên").classes("w-full mb-8").props("outlined rounded")
-                
+                ui.label("Phân công cứu hộ").classes(
+                    "text-2xl font-bold mb-6 font-outfit text-primary"
+                )
+                v_opts = {
+                    v['id']: f"{v['plate_number']} ({v['vehicle_type']})"
+                    for v in vehicles if v['status'] == 'available'
+                }
+                v_sel = ui.select(v_opts, label="Chọn Phương Tiện").classes(
+                    "w-full mb-4"
+                ).props("outlined rounded")
+
+                s_opts = {
+                    s['id']: f"NV #{s['id']} (Level {s['skill_level']})"
+                    for s in staff if s['status'] == 'AVAILABLE'
+                }
+                s_sel = ui.select(s_opts, label="Chọn Nhân Viên").classes(
+                    "w-full mb-8"
+                ).props("outlined rounded")
+
                 with ui.row().classes("w-full justify-end gap-3"):
                     ui.button("HỦY", on_click=d.close).props("flat")
+
                     async def assign():
                         if not v_sel.value or not s_sel.value:
                             ui.notify("Vui lòng chọn đủ nhân sự và phương tiện", type="warning")
@@ -183,25 +508,38 @@ def create_queue_page():
                             await _load_data()
                         except Exception as e:
                             ui.notify(f"Lỗi: {e}", type="negative")
-                    ui.button("XÁC NHẬN", on_click=assign).classes("bg-primary text-white px-8 rounded-xl font-bold")
+
+                    ui.button("XÁC NHẬN", on_click=assign).classes(
+                        "bg-primary text-white px-8 rounded-xl font-bold"
+                    )
             d.open()
 
         async def _show_complete_dialog(req):
             with ui.dialog() as d, ui.card().classes("p-8 rounded-3xl w-[400px]"):
-                ui.label("Hoàn thành cứu hộ").classes("text-2xl font-bold mb-6 font-outfit text-primary")
-                price = ui.number(label="Giá thực tế (VNĐ)", value=req.get('agreed_price', 200000)).classes("w-full mb-8").props("outlined rounded")
-                
+                ui.label("Hoàn thành cứu hộ").classes(
+                    "text-2xl font-bold mb-6 font-outfit text-primary"
+                )
+                price = ui.number(
+                    label="Giá thực tế (VNĐ)", value=req.get('agreed_price', 200000)
+                ).classes("w-full mb-8").props("outlined rounded")
+
                 with ui.row().classes("w-full justify-end gap-3"):
                     ui.button("HỦY", on_click=d.close).props("flat")
+
                     async def complete():
                         try:
-                            await update_request_status(req['id'], 'COMPLETED', agreed_price=price.value)
+                            await update_request_status(
+                                req['id'], 'COMPLETED', agreed_price=price.value
+                            )
                             ui.notify("Đã hoàn thành yêu cầu cứu hộ", type="positive")
                             d.close()
                             await _load_data()
                         except Exception as e:
                             ui.notify(f"Lỗi: {e}", type="negative")
-                    ui.button("XÁC NHẬN", on_click=complete).classes("bg-positive text-white px-8 rounded-xl font-bold")
+
+                    ui.button("XÁC NHẬN", on_click=complete).classes(
+                        "bg-positive text-white px-8 rounded-xl font-bold"
+                    )
             d.open()
 
         async def _do_reject(req_id):

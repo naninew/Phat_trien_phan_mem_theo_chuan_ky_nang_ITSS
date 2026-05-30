@@ -15,6 +15,7 @@ from app.utils.response import success_response, error_response
 from app.utils.jwt_helper import get_current_user_from_token
 from pydantic import BaseModel
 from app.schemas.rescue import CustomerVehicleCreate, CustomerVehicleUpdate, CustomerVehicleResponse
+from app.schemas.auth import PasswordUpdate
 
 class UserProfileUpdate(BaseModel):
     full_name: Optional[str] = None
@@ -411,4 +412,40 @@ def upload_chat_image(
             "uploaded_at": datetime.utcnow().isoformat(),
         },
         message="Image uploaded successfully"
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Password Management
+# ──────────────────────────────────────────────────────────────────────────────
+@router.put("/me/password", response_model=dict)
+def update_password(
+    password_data: PasswordUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_from_token),
+) -> dict:
+    """
+    Update user password.
+    
+    Requires:
+    - current_password: User's current password
+    - new_password: New password (6-128 characters)
+    - confirm_password: Confirmation of new password (must match new_password)
+    """
+    user_id = current_user["user_id"]
+    
+    # Call service to update password
+    success, message = auth_svc.update_user_password(
+        db, user_id, password_data.current_password, password_data.new_password
+    )
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=message
+        )
+    
+    return success_response(
+        data={"message": message},
+        message="Password updated successfully"
     )

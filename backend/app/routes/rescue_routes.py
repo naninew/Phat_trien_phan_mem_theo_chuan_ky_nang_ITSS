@@ -1,7 +1,9 @@
 """
 Rescue routes – đầy đủ endpoints cho customer, company staff và admin.
 """
+# pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 from typing import Optional, List
 
@@ -11,6 +13,7 @@ from app.schemas.rescue import (
     RescueRequestUpdate,
     ServiceCreate,
     RescueVehicleCreate,
+    RescueVehicleUpdate,
     RescueStaffCreate,
     RescueStaffUpdate,
     ServiceAssignmentCreate,
@@ -19,7 +22,6 @@ from app.schemas.rescue import (
     CustomerVehicleUpdate,
     CustomerVehicleResponse,
     RescueCompanyCreate,
-    RescueStaffCreate,
 )
 from app.services import rescue_svc, auth_svc
 from app.utils.response import success_response
@@ -36,11 +38,32 @@ router = APIRouter(prefix="/rescue", tags=["Rescue Services"])
 @router.get("/services")
 def list_services(db: Session = Depends(get_db)):
     """Lấy danh sách các tên dịch vụ độc nhất (để hiển thị dropdown)."""
-    services = db.query(Service.service_name).filter(Service.is_active == True).distinct().all()
+    
+    services = db.query(Service.id, Service.service_name).filter(Service.is_active == True).all()
+    # Sửa response để lấy id
+    result = [
+        {
+            "id": s.id,
+            "service_name": s.service_name
+        }
+        for s in services
+    ]
+
+    print("=== RAW SERVICES FROM DB ===")
+    print(services)
+
+    print("=== RESPONSE JSON ===")
+    print(result)
     return success_response(
-        data=[s.service_name for s in services],
-        message="Success",
-    )
+    data=[
+        {
+            "id": s.id,
+            "service_name": s.service_name
+        }
+        for s in services
+    ],
+    message="Success",
+)
 
 
 @router.post("/services")
@@ -191,19 +214,51 @@ def get_my_requests(
     current_user: dict = Depends(auth_svc.get_current_user_from_token),
 ):
     """Lấy danh sách requests của customer hiện tại."""
+
     from app.models.service import Service
     from app.models.company import RescueCompany
 
     requests = rescue_svc.get_user_requests(db, current_user["user_id"])
-    data = []
-    for r in requests:
-        company = db.query(RescueCompany).filter(RescueCompany.id == r.company_id).first() if r.company_id else None
-        services_data = []
-        for rs in r.request_services:
-            if rs.service:
-                services_data.append({"id": rs.service.id, "service_name": rs.service.service_name, "price": rs.unit_price})
 
-        data.append({
+    print("========== RAW REQUESTS ==========")
+    print(requests)
+
+    data = []
+
+    for r in requests:
+
+        print("========== REQUEST ==========")
+        print("ID =", r.id)
+        print("STATUS =", r.status)
+
+        company = (
+            db.query(RescueCompany)
+            .filter(RescueCompany.id == r.company_id)
+            .first()
+            if r.company_id else None
+        )
+
+        services_data = []
+
+        for rs in r.request_services:
+
+            print("---- REQUEST SERVICE ----")
+            print("RS =", rs)
+
+            if rs.service:
+
+                print("SERVICE ID =", rs.service.id)
+                print("SERVICE NAME =", rs.service.service_name)
+
+                services_data.append({
+                    "id": rs.service.id,
+                    "service_name": rs.service.service_name,
+                    "price": rs.unit_price
+                })
+
+        print("FINAL SERVICES DATA =", services_data)
+
+        item = {
             "id": r.id,
             "status": r.status,
             "services": services_data,
@@ -220,9 +275,18 @@ def get_my_requests(
             "feedback": r.feedback,
             "created_at": r.created_at.isoformat(),
             "updated_at": r.updated_at.isoformat(),
-        })
-    return success_response(data=data, message="Success")
+        }
+        print("FINAL ITEM =", item)
 
+        data.append(item)
+
+    print("========== FINAL RESPONSE ==========")
+    print(data)
+
+    return success_response(
+        data=data,
+        message="Success"
+    )
 
 @router.get("/requests/{request_id}")
 def get_request_detail(
@@ -267,9 +331,10 @@ def get_request_detail(
     if req.assignment:
         staff = db.query(RescueStaff).filter(RescueStaff.id == req.assignment.staff_id).first()
         r_vehicle = db.query(RescueVehicle).filter(RescueVehicle.id == req.assignment.rescue_vehicle_id).first()
+        staff_name = f"Nhân viên #{staff.id} - {staff.skill_level}" if staff else None
         assignment_data = {
             "staff_id": staff.id if staff else None,
-            "staff_name": staff.user.full_name if (staff and staff.user) else None,
+            "staff_name": staff_name,
             "rescue_vehicle_id": r_vehicle.id if r_vehicle else None,
             "rescue_vehicle_plate": r_vehicle.plate_number if r_vehicle else None,
             "assigned_time": req.assignment.assigned_time.isoformat() if req.assignment.assigned_time else None
@@ -604,6 +669,27 @@ def add_vehicle(
     return success_response(
         data={"id": vehicle.id, "plate_number": vehicle.plate_number},
         message="Đã thêm phương tiện",
+    )
+
+
+@router.put("/vehicles/{vehicle_id}")
+def update_vehicle(
+    vehicle_id: int,
+    vehicle_data: RescueVehicleUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
+
+    vehicle = rescue_svc.update_vehicle(db, vehicle_id, company.id, vehicle_data)
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phương tiện")
+
+    return success_response(
+        data={"id": vehicle.id, "plate_number": vehicle.plate_number},
+        message="Đã cập nhật phương tiện",
     )
 
 

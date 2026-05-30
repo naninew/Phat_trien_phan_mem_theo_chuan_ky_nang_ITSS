@@ -10,20 +10,31 @@ Tài liệu này hướng dẫn bạn cách thiết lập môi trường, khởi
 
 1. **Cài đặt thư viện**:
    ```bash
-   cd backend
-   pip install -r requirements.txt
+   python3 -m venv .venv
+   .venv/bin/python -m pip install -r backend/requirements.txt
    ```
 
 2. **Khởi tạo dữ liệu mẫu (Seed Data)**:
    Bước này sẽ tạo file database `rescue_system.db` (SQLite) và nạp các tài khoản test, công ty cứu hộ mẫu tại Hà Nội.
    ```bash
-   python create_seed_data.py
+   .venv/bin/python backend/generate_seed_data.py
    ```
 
-3. **Chạy Backend Server**:
-   Đứng tại thư mục `backend/` và chạy:
+3. **Chạy cả Backend và Frontend bằng 1 lệnh**:
+   Đứng tại thư mục gốc project và chạy:
    ```bash
-   python run.py
+   scripts/run_project.sh
+   ```
+   Nếu muốn reset database và nạp lại seed data:
+   ```bash
+   scripts/run_project.sh --reset-db
+   ```
+   Nếu port `8000` hoặc `8080` đang bận, script sẽ tự dùng port trống kế tiếp và in URL thật ra terminal.
+
+4. **Chạy Backend Server thủ công**:
+   Đứng tại thư mục gốc project và chạy:
+   ```bash
+   .venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
    ```
    *Lưu ý: Không chạy trực tiếp `python app/main.py` vì sẽ lỗi import.*
    *Backend sẽ chạy tại: `http://localhost:8000`*
@@ -33,19 +44,19 @@ Tài liệu này hướng dẫn bạn cách thiết lập môi trường, khởi
 
 1. **Cài đặt thư viện**:
    ```bash
-   cd frontend
-   pip install nicegui httpx python-dotenv
+   .venv/bin/python -m pip install -r backend/requirements.txt
    ```
 
 2. **Chạy Frontend App**:
    ```bash
-   python main.py
+   cd frontend
+   ../.venv/bin/python main.py
    ```
    *Frontend sẽ chạy tại: `http://localhost:8080`*
 
 ## 4. Tài khoản Kiểm thử (Test Accounts)
 
-Sau khi chạy `create_seed_data.py`, bạn có thể sử dụng các tài khoản sau:
+Sau khi chạy `generate_seed_data.py`, bạn có thể sử dụng các tài khoản sau:
 
 | Vai trò | Username | Password | Mô tả |
 | :--- | :--- | :--- | :--- |

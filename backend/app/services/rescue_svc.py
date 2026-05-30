@@ -19,7 +19,7 @@ from app.models.vehicle import RescueVehicle, Vehicle
 from app.models.staff import RescueStaff, StaffStatus
 from app.schemas.rescue import (
     RescueRequestCreate, ServiceCreate, 
-    RescueVehicleCreate, CustomerVehicleCreate, CustomerVehicleUpdate,
+    RescueVehicleCreate, RescueVehicleUpdate, CustomerVehicleCreate, CustomerVehicleUpdate,
     RescueStaffCreate, RescueStaffUpdate, ServiceAssignmentCreate, PaymentCreate,
     RescueCompanyCreate
 )
@@ -188,22 +188,25 @@ def create_rescue_request(
     request_data: RescueRequestCreate,
 ) -> RescueRequest:
     req = RescueRequest(
+        #service_id=request_data.service_ids[0],
         user_id=user_id,
         vehicle_id=request_data.vehicle_id,
         company_id=request_data.company_id,
         latitude=request_data.latitude,
         longitude=request_data.longitude,
         address_description=request_data.address_description,
-        incident_type=request_data.incident_type,
+        incident_type = request_data.incident_type,
         description=request_data.description,
         images=request_data.images or [],
         status=RequestStatus.PENDING,
         payment_method=request_data.payment_method or "cash",
+        #agreed_price = request_data.agreed_price,
     )
     db.add(req)
     db.flush() # Để lấy id cho req
-    
-    # Tạo các RequestService
+    print("===== REQUEST =====")
+    print(req)
+    #Tạo các RequestService
     services = db.query(Service).filter(Service.id.in_(request_data.service_ids)).all()
     for s in services:
         rs = RequestService(
@@ -467,6 +470,29 @@ def create_vehicle(db: Session, company_id: int, vehicle_data: RescueVehicleCrea
         status="available",
     )
     db.add(v)
+    db.commit()
+    db.refresh(v)
+    return v
+
+def update_vehicle(db: Session, vehicle_id: int, company_id: int, data: RescueVehicleUpdate) -> Optional[RescueVehicle]:
+    v = db.query(RescueVehicle).filter(
+        RescueVehicle.id == vehicle_id,
+        RescueVehicle.company_id == company_id,
+    ).first()
+    if not v:
+        return None
+    
+    if data.plate_number is not None:
+        v.plate_number = data.plate_number
+    if data.vehicle_type is not None:
+        v.vehicle_type = data.vehicle_type
+    if data.capacity is not None:
+        v.capacity = data.capacity
+    if data.status is not None:
+        if v.status == "on_mission" and data.status != "on_mission":
+            pass # Or handle logic here if we need to prevent status change during mission
+        v.status = data.status
+        
     db.commit()
     db.refresh(v)
     return v

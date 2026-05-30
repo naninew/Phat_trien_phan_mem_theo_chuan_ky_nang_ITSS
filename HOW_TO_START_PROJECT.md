@@ -12,19 +12,13 @@ Tài liệu này hướng dẫn chi tiết cách thiết lập và chạy hệ t
 
 ## 🛠️ Bước 1: Tải mã nguồn và Cài đặt môi trường
 
-1. **Cài đặt thư viện cho Backend:**
+1. **Tạo virtualenv và cài thư viện:**
    ```bash
-   cd backend
-   pip install -r requirements.txt
+   python3 -m venv .venv
+   .venv/bin/python -m pip install -r backend/requirements.txt
    ```
 
-2. **Cài đặt thư viện cho Frontend:**
-   ```bash
-   cd ../frontend
-   pip install -r requirements.txt
-   # Hoặc nếu không có file requirements:
-   pip install nicegui httpx python-dotenv plotly
-   ```
+   File `backend/requirements.txt` hiện bao gồm cả dependency Backend và Frontend.
 
 ---
 
@@ -34,7 +28,7 @@ Dự án sử dụng SQLite để người mới không cần cài đặt SQL Se
 
 ```bash
 cd backend
-python generate_seed_data.py
+../.venv/bin/python generate_seed_data.py
 ```
 *Lưu ý: Lệnh này sẽ tạo file `rescue_system.db`. Nếu bạn muốn làm sạch dữ liệu cũ, hãy xóa file .db này trước khi chạy.*
 
@@ -42,12 +36,29 @@ python generate_seed_data.py
 
 ## 🖥️ Bước 3: Khởi chạy Hệ thống
 
-Bạn cần mở 2 cửa sổ Terminal (hoặc CMD/PowerShell) riêng biệt:
+### Cách nhanh: chạy Backend và Frontend bằng 1 lệnh
+
+Đứng tại thư mục gốc project và chạy:
+
+```bash
+scripts/run_project.sh
+```
+
+Nếu muốn reset database và nạp lại dữ liệu mẫu trước khi chạy:
+
+```bash
+scripts/run_project.sh --reset-db
+```
+
+Nhấn `Ctrl+C` để dừng cả Backend và Frontend.
+
+Nếu port `8000` hoặc `8080` đang bận, script sẽ tự dùng port trống kế tiếp và in URL thật ra terminal.
+
+### Cách thủ công: chạy 2 cửa sổ Terminal riêng biệt
 
 ### Cửa sổ 1: Chạy Backend (API)
 ```bash
-cd backend
-python run.py
+.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
 ```
 - API sẽ chạy tại: `http://localhost:8000`
 - Tài liệu API (Swagger UI): `http://localhost:8000/docs`
@@ -55,7 +66,7 @@ python run.py
 ### Cửa sổ 2: Chạy Frontend (WebApp)
 ```bash
 cd frontend
-python main.py
+../.venv/bin/python main.py
 ```
 - WebApp sẽ chạy tại: `http://localhost:8080` (Mặc định tự động mở trình duyệt).
 
