@@ -4,7 +4,7 @@ Trang quản lý đơn vị cứu hộ – dành cho Quản trị viên (Admin).
 from nicegui import ui
 from typing import Optional, Dict, Any, List
 
-from core.auth import require_role
+from core.auth import require_admin_auth
 from components.page_layout import page_layout
 from services.admin_api import get_companies, update_company_status
 
@@ -13,7 +13,7 @@ def create_companies_page():
 
     @ui.page('/admin/companies')
     async def companies_page():
-        if not require_role("admin"):
+        if not require_admin_auth():
             return
 
         with page_layout("/admin/companies", title="Quản Lý Đơn Vị"):

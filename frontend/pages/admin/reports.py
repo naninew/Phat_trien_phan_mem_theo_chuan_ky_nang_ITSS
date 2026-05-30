@@ -2,7 +2,7 @@
 Trang báo cáo và thống kê dành cho Admin.
 """
 from nicegui import ui
-from core.auth import require_role
+from core.auth import require_admin_auth
 from components.page_layout import page_layout
 import httpx
 from core.config import BACKEND_URL
@@ -12,7 +12,7 @@ def create_reports_page():
 
     @ui.page('/admin/reports')
     async def reports_page():
-        if not require_role("admin"):
+        if not require_admin_auth():
             return
 
         with page_layout("/admin/reports", title="Báo Cáo & Thống Kê"):

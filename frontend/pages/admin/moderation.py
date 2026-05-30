@@ -2,7 +2,7 @@
 Trang kiểm duyệt nội dung (Đánh giá & Bài đăng cộng đồng).
 """
 from nicegui import ui
-from core.auth import require_role
+from core.auth import require_admin_auth
 from components.page_layout import page_layout
 from services.admin_api import get_reviews, delete_review, get_community_posts, delete_community_post
 
@@ -10,7 +10,7 @@ def create_moderation_page():
 
     @ui.page('/admin/moderation')
     async def moderation_page():
-        if not require_role("admin"):
+        if not require_admin_auth():
             return
 
         with page_layout("/admin/moderation", title="Kiểm Duyệt Nội Dung"):

@@ -4,7 +4,7 @@ Trang thông tin tài khoản Admin - Profile & Đăng xuất
 from nicegui import ui, app
 from typing import Dict, Any, Optional
 
-from core.auth import require_role, get_current_user, get_user_name, logout_user
+from core.auth import require_admin_auth, get_current_user, get_user_name, logout_user
 from components.page_layout import page_layout
 from services.api_client import api_client
 
@@ -13,7 +13,7 @@ def create_admin_profile_page():
 
     @ui.page('/admin/profile')
     async def admin_profile_page():
-        if not require_role("admin"):
+        if not require_admin_auth():
             return
 
         with page_layout("/admin/profile", title="Thông Tin Tài Khoản"):

@@ -31,7 +31,7 @@ from core.auth import (
 from core.config import APP_TITLE, APP_VERSION, STORAGE_SECRET
 
 # Import đầy đủ toàn bộ các trang chức năng từ cả 2 phiên bản
-from pages.auth.login_page import create_login_page
+from pages.auth.login_page import create_login_page, create_admin_login_page
 from pages.auth.register_page import create_register_page
 from pages.customer.dashboard import create_customer_dashboard
 from pages.customer.vehicles import create_vehicles_page
@@ -49,6 +49,7 @@ from pages.company.reviews import create_reviews_page
 from pages.company.profile import create_profile_page
 from pages.admin.dashboard import create_admin_dashboard
 from pages.admin.users import create_users_page
+from pages.admin.user_detail import create_user_detail_page
 from pages.admin.companies import create_companies_page
 from pages.admin.reports import create_reports_page
 from pages.admin.moderation import create_moderation_page
@@ -273,6 +274,7 @@ def setup_app():
     """Khởi tạo cấu trúc định tuyến và kích hoạt ứng dụng NiceGUI."""
     # 1. Auth pages
     create_login_page()
+    create_admin_login_page()   # UC-47: /admin-panel/login
     create_register_page()
     
     # 2. Customer pages
@@ -296,6 +298,7 @@ def setup_app():
     # 4. Admin pages
     create_admin_dashboard()
     create_users_page()
+    create_user_detail_page()
     create_companies_page()
     create_reports_page()
     create_moderation_page()

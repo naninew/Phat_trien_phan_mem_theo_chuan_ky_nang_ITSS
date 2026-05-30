@@ -9,20 +9,85 @@ from app.models.request import RescueRequest
 from app.models.payment import Payment
 
 def get_admin_stats(db: Session) -> Dict[str, Any]:
+    today_str = datetime.utcnow().strftime('%Y-%m-%d')
+    month_str = datetime.utcnow().strftime('%Y-%m')
+
     total_users = db.query(func.count(User.id)).scalar()
     total_companies = db.query(func.count(RescueCompany.id)).scalar()
     active_companies = db.query(func.count(RescueCompany.id)).filter(RescueCompany.status == "active").scalar()
+    
+    # pending companies
+    pending_companies = db.query(func.count(RescueCompany.id)).filter(
+        RescueCompany.is_verified == False,
+        RescueCompany.status != "suspended"
+    ).scalar()
+
     total_requests = db.query(func.count(RescueRequest.id)).scalar()
     pending_requests = db.query(func.count(RescueRequest.id)).filter(RescueRequest.status == "PENDING").scalar()
+    
+    # requests today
+    requests_today = db.query(func.count(RescueRequest.id)).filter(
+        func.strftime('%Y-%m-%d', RescueRequest.created_at) == today_str
+    ).scalar()
+
+    # revenue total and this month
     total_revenue = db.query(func.sum(Payment.amount)).filter(Payment.status == "success").scalar() or 0
+    revenue_this_month = db.query(func.sum(Payment.amount)).filter(
+        Payment.status == "success",
+        func.strftime('%Y-%m', Payment.created_at) == month_str
+    ).scalar() or 0
+
+    # requests by status
+    status_data = db.query(
+        RescueRequest.status,
+        func.count(RescueRequest.id)
+    ).group_by(RescueRequest.status).all()
+    requests_by_status = {s[0]: s[1] for s in status_data}
     
     return {
         "total_users": total_users,
         "total_companies": total_companies,
         "active_companies": active_companies,
+        "pending_companies": pending_companies,
         "total_requests": total_requests,
         "pending_requests": pending_requests,
-        "total_revenue": float(total_revenue)
+        "requests_today": requests_today,
+        "total_revenue": float(total_revenue),
+        "revenue_this_month": float(revenue_this_month),
+        "requests_by_status": requests_by_status
+    }
+
+def get_daily_request_stats(db: Session, days: int = 7) -> Dict[str, Any]:
+    """Lấy số lượng yêu cầu theo từng ngày trong X ngày gần nhất."""
+    from datetime import timedelta
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=days - 1)
+    
+    start_str = start_date.strftime('%Y-%m-%d')
+    end_str = end_date.strftime('%Y-%m-%d 23:59:59')
+
+    # Query group by date
+    daily_data = db.query(
+        func.strftime('%Y-%m-%d', RescueRequest.created_at).label('date'),
+        func.count(RescueRequest.id).label('count')
+    ).filter(
+        RescueRequest.created_at >= start_str,
+        RescueRequest.created_at <= end_str
+    ).group_by('date').order_by('date').all()
+
+    # Create a full map of the last X days with 0 counts to ensure no gaps
+    date_map = {}
+    for i in range(days):
+        d = (start_date + timedelta(days=i)).strftime('%Y-%m-%d')
+        date_map[d] = 0
+    
+    for r in daily_data:
+        date_map[r.date] = r.count
+
+    sorted_dates = sorted(list(date_map.keys()))
+    return {
+        "labels": sorted_dates,
+        "values": [date_map[d] for d in sorted_dates]
     }
 
 def get_chart_stats(db: Session) -> Dict[str, Any]:

@@ -1,0 +1,1 @@
+from .user_detail import create_user_detail_page

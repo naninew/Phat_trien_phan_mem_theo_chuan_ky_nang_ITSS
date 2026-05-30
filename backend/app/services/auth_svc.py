@@ -10,6 +10,11 @@ from app.models.user import User, UserRole, AccountStatus
 from app.schemas.auth import UserRegister
 from app.utils.jwt_helper import create_access_token, create_refresh_token, get_current_user_from_token
 
+# ── Error codes for authenticate_user ───────────────────────────────────────
+AUTH_ERROR_WRONG_CREDENTIALS = "WRONG_CREDENTIALS"
+AUTH_ERROR_SUSPENDED         = "ACCOUNT_SUSPENDED"
+AUTH_ERROR_INACTIVE          = "ACCOUNT_INACTIVE"
+
 
 # Password hashing context - Use pbkdf2_sha256 for better compatibility on Python 3.14
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -84,7 +89,7 @@ def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
     return db.query(User).filter(User.id == user_id).first()
 
 
-def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
+def authenticate_user(db: Session, username: str, password: str) -> Tuple[Optional[User], Optional[str]]:
     """
     Authenticate a user with username and password.
     
@@ -94,16 +99,22 @@ def authenticate_user(db: Session, username: str, password: str) -> Optional[Use
         password: Plain text password
     
     Returns:
-        User object if authenticated successfully, None otherwise
+        Tuple (user, error_code):
+          - (User, None)                          → đăng nhập thành công
+          - (None, AUTH_ERROR_WRONG_CREDENTIALS)  → không tìm thấy user hoặc sai mật khẩu
+          - (None, AUTH_ERROR_SUSPENDED)          → tài khoản bị SUSPENDED
+          - (None, AUTH_ERROR_INACTIVE)           → tài khoản INACTIVE
     """
     user = get_user_by_username(db, username)
     if not user:
-        return None
+        return None, AUTH_ERROR_WRONG_CREDENTIALS
     if not verify_password(password, user.password_hash):
-        return None
-    if user.status != AccountStatus.ACTIVE:
-        return None
-    return user
+        return None, AUTH_ERROR_WRONG_CREDENTIALS
+    if user.status == AccountStatus.SUSPENDED:
+        return None, AUTH_ERROR_SUSPENDED
+    if user.status == AccountStatus.INACTIVE:
+        return None, AUTH_ERROR_INACTIVE
+    return user, None
 
 
 def create_user(db: Session, user_data: UserRegister, role: UserRole = UserRole.CUSTOMER) -> User:

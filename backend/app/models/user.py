@@ -38,6 +38,7 @@ class User(Base):
     status = Column(SQLEnum(AccountStatus), nullable=False, default=AccountStatus.ACTIVE)
     address = Column(String(200), nullable=True)
     avatar_url = Column(String(500), nullable=True)  # Profile picture URL
+    suspend_reason = Column(String(500), nullable=True) # Reason if suspended
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

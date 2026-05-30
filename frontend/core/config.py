@@ -18,6 +18,7 @@ SESSION_ROLE_KEY  = "user_role"
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 LOGIN_PAGE          = "/login"
+ADMIN_LOGIN_PAGE    = "/admin-panel/login"   # UC-47: trang đăng nhập riêng cho Admin
 REGISTER_PAGE       = "/register"
 CUSTOMER_DASHBOARD  = "/customer/dashboard"
 COMPANY_DASHBOARD   = "/company/dashboard"
@@ -25,3 +26,4 @@ ADMIN_DASHBOARD     = "/admin/dashboard"
 
 # ── NiceGUI storage secret (override in production via env) ──────────────────
 STORAGE_SECRET: str = os.getenv("STORAGE_SECRET", "rescue-system-secret-2024-change-me")
+

@@ -59,18 +59,40 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)) -> dict:
     
     - **username**: Username
     - **password**: Password
+
+    Error codes in response detail:
+    - 401 + "Tên đăng nhập hoặc mật khẩu không đúng"  → sai credentials
+    - 403 + "Tài khoản đã bị khóa"                    → SUSPENDED
+    - 403 + "Tài khoản chưa được kích hoạt"            → INACTIVE
     """
-    # Authenticate user
-    user = auth_svc.authenticate_user(db, credentials.username, credentials.password)
-    if not user:
+    from app.services.auth_svc import (
+        AUTH_ERROR_WRONG_CREDENTIALS,
+        AUTH_ERROR_SUSPENDED,
+        AUTH_ERROR_INACTIVE,
+    )
+
+    # authenticate_user trả về tuple (user | None, error_code | None)
+    user, error_code = auth_svc.authenticate_user(db, credentials.username, credentials.password)
+
+    if error_code == AUTH_ERROR_WRONG_CREDENTIALS:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password"
+            detail="Tên đăng nhập hoặc mật khẩu không đúng",
         )
-    
+    if error_code == AUTH_ERROR_SUSPENDED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên để được hỗ trợ.",
+        )
+    if error_code == AUTH_ERROR_INACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản chưa được kích hoạt. Vui lòng kiểm tra email để xác minh.",
+        )
+
     # Generate tokens
     access_token, refresh_token = auth_svc.generate_tokens(user)
-    
+
     return success_response(
         data={
             "access_token": access_token,
