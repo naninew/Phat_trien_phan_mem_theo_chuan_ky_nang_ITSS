@@ -56,17 +56,48 @@ class APIClient:
                 return {"success": False, "message": str(e)}
 
     @staticmethod
-    async def delete(endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def delete(
+        endpoint: str,
+        params: Optional[Dict[str, Any]] = None,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.delete(
                     f"{BACKEND_URL}{endpoint}",
                     params=params,
+                    json=data,
                     headers=APIClient.get_headers()
                 )
                 return APIClient._handle_response(response)
             except Exception as e:
                 return {"success": False, "message": str(e)}
+
+    @staticmethod
+    async def download(endpoint: str, params: Optional[Dict[str, Any]] = None) -> tuple[bytes, str]:
+        """Tải file binary (Excel/PDF) từ backend."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{BACKEND_URL}{endpoint}",
+                params=params,
+                headers=APIClient.get_headers(),
+            )
+            if response.status_code == 401:
+                app.storage.user.clear()
+                ui.navigate.to("/login")
+                raise RuntimeError("Session expired. Please login again.")
+            if response.status_code >= 400:
+                detail = "Không thể tải file"
+                try:
+                    detail = response.json().get("detail", detail)
+                except Exception:
+                    pass
+                raise RuntimeError(detail)
+            filename = "bao_cao.bin"
+            cd = response.headers.get("content-disposition", "")
+            if "filename=" in cd:
+                filename = cd.split("filename=")[-1].strip('"')
+            return response.content, filename
 
     @staticmethod
     def _handle_response(response: httpx.Response) -> Dict[str, Any]:

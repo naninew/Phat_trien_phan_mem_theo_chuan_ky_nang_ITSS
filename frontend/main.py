@@ -47,13 +47,7 @@ from pages.company.fleet import create_fleet_page
 from pages.company.services_mgmt import create_services_management_page
 from pages.company.reviews import create_reviews_page
 from pages.company.profile import create_profile_page
-from pages.admin.dashboard import create_admin_dashboard
-from pages.admin.users import create_users_page
-from pages.admin.user_detail import create_user_detail_page
-from pages.admin.companies import create_companies_page
-from pages.admin.reports import create_reports_page
-from pages.admin.moderation import create_moderation_page
-from pages.admin.profile import create_admin_profile_page
+from pages.admin import register_admin_pages
 from pages.shared.profile_page import create_profile_page
 
 
@@ -296,13 +290,7 @@ def setup_app():
     create_profile_page()
     
     # 4. Admin pages
-    create_admin_dashboard()
-    create_users_page()
-    create_user_detail_page()
-    create_companies_page()
-    create_reports_page()
-    create_moderation_page()
-    create_admin_profile_page()
+    register_admin_pages()
     
     # 5. Shared pages
     create_profile_page()

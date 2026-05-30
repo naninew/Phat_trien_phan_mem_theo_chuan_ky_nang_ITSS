@@ -63,18 +63,42 @@ def get_company_by_owner_id(db: Session, owner_id: int) -> Optional[RescueCompan
     return db.query(RescueCompany).filter(RescueCompany.owner_id == owner_id).first()
 
 
-def get_all_companies(db: Session, status_filter: Optional[str] = None) -> List[RescueCompany]:
+def get_all_companies(
+    db: Session,
+    status_filter: Optional[str] = None,
+    area: Optional[str] = None,
+    verified_filter: Optional[str] = None,
+    search: Optional[str] = None,
+) -> List[RescueCompany]:
     q = db.query(RescueCompany)
     if status_filter and status_filter != "all":
         q = q.filter(RescueCompany.status == status_filter)
+    if area and area != "all":
+        q = q.filter(RescueCompany.operating_area.ilike(f"%{area}%"))
+    if verified_filter == "pending":
+        q = q.filter(RescueCompany.is_verified == False, RescueCompany.status != "suspended")
+    elif verified_filter == "verified":
+        q = q.filter(RescueCompany.is_verified == True)
+    elif verified_filter == "rejected":
+        q = q.filter(RescueCompany.status == "suspended", RescueCompany.is_verified == False)
+    if search:
+        q = q.filter(
+            (RescueCompany.company_name.ilike(f"%{search}%"))
+            | (RescueCompany.hotline.ilike(f"%{search}%"))
+            | (RescueCompany.business_license.ilike(f"%{search}%"))
+        )
     return q.order_by(RescueCompany.created_at.desc()).all()
 
 
 def create_company_profile(db: Session, owner_id: int, data: RescueCompanyCreate) -> RescueCompany:
     """Tạo profile công ty mới cho owner."""
+    from app.models.user import User
+
+    owner = db.query(User).filter(User.id == owner_id).first()
     company = RescueCompany(
         owner_id=owner_id,
         company_name=data.company_name,
+        representative_name=owner.full_name if owner else None,
         address=data.address,
         hotline=data.hotline,
         business_license=data.business_license or f"LIC-{owner_id}",
@@ -633,3 +657,24 @@ def get_admin_stats(db: Session) -> dict:
         "pending_requests": pending_requests,
         "completed_requests": completed_requests,
     }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Notifications (delegates to notification_svc)
+# ──────────────────────────────────────────────────────────────────────────────
+from app.services import notification_svc  # noqa: E402
+
+send_notification = notification_svc.send_notification
+send_notification_to_company = notification_svc.send_notification_to_company
+
+
+def company_has_active_requests(db: Session, company_id: int) -> bool:
+    active = db.query(RescueRequest).filter(
+        RescueRequest.company_id == company_id,
+        RescueRequest.status.notin_([
+            RequestStatus.COMPLETED.value,
+            RequestStatus.CANCELLED.value,
+            RequestStatus.REJECTED.value,
+        ]),
+    ).first()
+    return active is not None

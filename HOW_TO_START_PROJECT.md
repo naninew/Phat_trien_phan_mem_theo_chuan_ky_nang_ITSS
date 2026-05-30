@@ -1,110 +1,202 @@
-# 🚀 Hướng dẫn Khởi động Hệ thống Cứu hộ Xe (ITSS Roadside Assistance)
+# Hướng dẫn khởi động — Rescue24 (ITSS Roadside Assistance)
 
-Tài liệu này hướng dẫn chi tiết cách thiết lập và chạy hệ thống từ lúc mới tải code về. Hệ thống bao gồm Backend (FastAPI) và Frontend (NiceGUI), sử dụng SQLite làm cơ sở dữ liệu mặc định.
+Tài liệu hướng dẫn thiết lập và chạy hệ thống từ đầu: **Backend FastAPI** + **Frontend NiceGUI**, cơ sở dữ liệu **SQLite** (không cần cài PostgreSQL để dev).
 
----
-
-## 📋 Điều kiện tiên quyết
-- **Python**: Phiên bản 3.9 trở lên (Khuyến nghị 3.10+).
-- **Trình duyệt**: Chrome, Edge hoặc Firefox bản mới nhất.
+Cấu trúc chi tiết: [DETAIL_STRUCTURE.md](./DETAIL_STRUCTURE.md) · Kiểm thử: [HOW_TO_RUN_TEST.md](./HOW_TO_RUN_TEST.md)
 
 ---
 
-## 🛠️ Bước 1: Tải mã nguồn và Cài đặt môi trường
+## Điều kiện tiên quyết
 
-1. **Tạo virtualenv và cài thư viện:**
-   ```bash
-   python3 -m venv .venv
-   .venv/bin/python -m pip install -r backend/requirements.txt
-   ```
-
-   File `backend/requirements.txt` hiện bao gồm cả dependency Backend và Frontend.
+| Yêu cầu | Ghi chú |
+|---------|---------|
+| **Python 3.10+** | Khuyến nghị 3.10 hoặc 3.11 |
+| **Trình duyệt** | Chrome, Edge hoặc Firefox |
+| **Git Bash** (Windows, tùy chọn) | Để chạy `scripts/run_project.sh` |
 
 ---
 
-## 🗄️ Bước 2: Khởi tạo Cơ sở dữ liệu
+## Bước 1: Clone và cài dependency
 
-Dự án sử dụng SQLite để người mới không cần cài đặt SQL Server phức tạp. Để tạo database mẫu (Seed data):
+Mở terminal tại **thư mục gốc** repository.
+
+### Windows (PowerShell)
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r backend\requirements.txt
+```
+
+### Linux / macOS / Git Bash
 
 ```bash
-cd backend
-../.venv/bin/python generate_seed_data.py
+python3 -m venv .venv
+.venv/bin/python -m pip install -r backend/requirements.txt
 ```
-*Lưu ý: Lệnh này sẽ tạo file `rescue_system.db`. Nếu bạn muốn làm sạch dữ liệu cũ, hãy xóa file .db này trước khi chạy.*
+
+File `backend/requirements.txt` gồm cả thư viện Backend (FastAPI, SQLAlchemy, JWT…) và Frontend (NiceGUI, plotly).
 
 ---
 
-## 🖥️ Bước 3: Khởi chạy Hệ thống
+## Bước 2: Khởi tạo cơ sở dữ liệu (seed)
 
-### Cách nhanh: chạy Backend và Frontend bằng 1 lệnh
+Script tạo file `backend/rescue_system.db`, schema đầy đủ và dữ liệu mẫu (~10 bản ghi mỗi bảng).
 
-Đứng tại thư mục gốc project và chạy:
+**Lưu ý:** Mỗi lần chạy sẽ **xóa toàn bộ dữ liệu cũ** trong DB đó.
+
+### Windows
+
+```powershell
+.\.venv\Scripts\python backend\generate_seed_data.py
+```
+
+### Linux / macOS
+
+```bash
+.venv/bin/python backend/generate_seed_data.py
+```
+
+Muốn làm sạch thủ công: xóa `backend/rescue_system.db` rồi chạy lại lệnh trên.
+
+**PostgreSQL (tùy chọn):** đặt `DATABASE_URL=postgresql://user:pass@host:5432/dbname` trước khi chạy seed; tham khảo `scripts/init_postgres.sql`.
+
+---
+
+## Bước 3: Chạy hệ thống
+
+### Cách 1 — Một lệnh (khuyến nghị trên Linux/macOS hoặc Git Bash)
 
 ```bash
 scripts/run_project.sh
 ```
 
-Nếu muốn reset database và nạp lại dữ liệu mẫu trước khi chạy:
+Reset DB và nạp lại seed trước khi chạy:
 
 ```bash
 scripts/run_project.sh --reset-db
 ```
 
-Nhấn `Ctrl+C` để dừng cả Backend và Frontend.
+Bỏ qua bước cài pip (đã cài sẵn):
 
-Nếu port `8000` hoặc `8080` đang bận, script sẽ tự dùng port trống kế tiếp và in URL thật ra terminal.
-
-### Cách thủ công: chạy 2 cửa sổ Terminal riêng biệt
-
-### Cửa sổ 1: Chạy Backend (API)
 ```bash
+scripts/run_project.sh --no-install
+```
+
+Script sẽ:
+1. Tạo `.venv` nếu chưa có  
+2. Cài `backend/requirements.txt` (trừ khi `--no-install`)  
+3. Seed DB nếu chưa có file hoặc khi `--reset-db`  
+4. Khởi động Backend + Frontend song song  
+
+Nhấn **Ctrl+C** để dừng cả hai.
+
+Nếu cổng **8000** (API) hoặc **8080** (UI) đang bận, script tự chọn cổng trống và in URL thực tế ra terminal. Khi cổng backend đổi, frontend nhận `BACKEND_URL` qua biến môi trường từ script.
+
+### Cách 2 — Hai terminal (Windows / mọi OS)
+
+**Terminal 1 — Backend**
+
+Đứng tại thư mục gốc project:
+
+```powershell
+# Windows
+.\.venv\Scripts\python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+```
+
+```bash
+# Linux / macOS
 .venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
 ```
-- API sẽ chạy tại: `http://localhost:8000`
-- Tài liệu API (Swagger UI): `http://localhost:8000/docs`
 
-### Cửa sổ 2: Chạy Frontend (WebApp)
-```bash
+| Dịch vụ | URL |
+|---------|-----|
+| API | http://127.0.0.1:8000 |
+| Swagger | http://127.0.0.1:8000/docs |
+| Health | http://127.0.0.1:8000/health |
+
+**Terminal 2 — Frontend**
+
+```powershell
+# Windows
 cd frontend
-../.venv/bin/python main.py
+$env:BACKEND_URL="http://127.0.0.1:8000/api/v1"
+..\.\.venv\Scripts\python main.py
 ```
-- WebApp sẽ chạy tại: `http://localhost:8080` (Mặc định tự động mở trình duyệt).
+
+```bash
+# Linux / macOS
+cd frontend
+BACKEND_URL="http://127.0.0.1:8000/api/v1" ../.venv/bin/python main.py
+```
+
+| Dịch vụ | URL mặc định |
+|---------|----------------|
+| Web UI | http://localhost:8080 |
+| Landing | http://localhost:8080/ |
+| Đăng nhập Admin | http://localhost:8080/admin-panel/login |
+
+Đổi cổng frontend: `FRONTEND_PORT=9000` (PowerShell: `$env:FRONTEND_PORT="9000"`).
 
 ---
 
-## 👤 Thông tin Tài khoản Thử nghiệm
+## Tài khoản thử nghiệm
 
-Hệ thống đã nạp sẵn các tài khoản sau (Mật khẩu mặc định: `Pass123!`, riêng Admin là `Admin123!`):
+Sau khi chạy `generate_seed_data.py`:
 
-| Vai trò | Username | Chức năng chính |
-| :--- | :--- | :--- |
-| **Quản trị viên** | `admin` | Quản lý toàn sàn, duyệt công ty, xem báo cáo doanh thu. |
-| **Khách hàng** | `customer1` -> `customer5` | Đặt cứu hộ, quản lý xe cá nhân, chat với công ty. |
-| **Công ty** | `company1` -> `company5` | Quản lý đội xe, nhân viên, tiếp nhận và xử lý sự cố. |
+| Vai trò | Username | Mật khẩu | Ghi chú |
+|---------|----------|----------|---------|
+| **Admin** | `admin` | `Admin123!` | Đăng nhập tại `/admin-panel/login` |
+| **Khách hàng** | `customer1` … `customer10` | `Pass123!` | Đăng nhập tại `/login` |
+| **Công ty cứu hộ** | `company1` … `company10` | `Pass123!` | Mỗi user gắn một `RescueCompany` ở Hà Nội |
 
----
+Chức năng chính theo vai trò:
 
-## 🧪 Bước 4: Chạy Kiểm thử (Automation Testing)
-
-Để đảm bảo hệ thống hoạt động ổn định sau khi cài đặt, bạn có thể chạy bộ test tự động:
-
-1. **Kiểm tra tính năng Admin:**
-   ```bash
-   python -m pytest tests/test_sprint8_admin.py -v
-   ```
-
-2. **Kiểm tra luồng nghiệp vụ toàn trình (End-to-End):**
-   ```bash
-   python -m pytest tests/test_e2e_flow.py -v
-   ```
+- **Customer:** tìm cứu hộ gần, gửi/theo dõi yêu cầu, quản lý xe, cộng đồng, đánh giá  
+- **Company:** hàng đợi, điều phối xe/nhân viên, dịch vụ, fleet  
+- **Admin:** thống kê, duyệt công ty, quản lý user, báo cáo Excel/PDF, kiểm duyệt  
 
 ---
 
-## ❓ Xử lý sự cố thường gặp
+## Bước 4: Kiểm thử nhanh (tùy chọn)
 
-- **Lỗi `ModuleNotFoundError: No module named 'app'`**: Đảm bảo bạn đang chạy lệnh từ thư mục gốc hoặc đã thực hiện `sys.path` đúng như hướng dẫn trong các file test.
-- **Cổng 8000 hoặc 8080 đã bị chiếm dụng**: Kiểm tra xem có ứng dụng nào khác đang chạy trên các cổng này không và tắt chúng đi.
-- **Lỗi Cơ sở dữ liệu**: Nếu gặp lỗi `IntegrityError`, hãy xóa file `rescue_system.db` và chạy lại `generate_seed_data.py`.
+Đảm bảo đã cài pytest (có trong môi trường dev hoặc `pip install pytest`).
+
+```powershell
+# Windows — từ thư mục gốc
+.\.venv\Scripts\python -m pytest tests/test_sprint9_admin.py -v
+.\.venv\Scripts\python -m pytest tests/test_e2e_flow.py -v
+```
+
+```bash
+# Linux / macOS
+.venv/bin/python -m pytest tests/test_sprint9_admin.py -v
+.venv/bin/python -m pytest tests/test_e2e_flow.py -v
+```
+
+Chạy toàn bộ test: `python -m pytest -v` (xem thêm [HOW_TO_RUN_TEST.md](./HOW_TO_RUN_TEST.md)).
 
 ---
-*Chúc bạn có trải nghiệm tốt với hệ thống ITSS Roadside Assistance!*
+
+## Xử lý sự cố thường gặp
+
+| Triệu chứng | Cách xử lý |
+|-------------|------------|
+| `ModuleNotFoundError: No module named 'app'` | Chạy uvicorn với `--app-dir backend` từ **thư mục gốc**, không `cd backend` rồi import sai |
+| Frontend không gọi được API | Kiểm tra `BACKEND_URL` trùng cổng backend; xem log terminal backend |
+| `IntegrityError` / dữ liệu lỗi | Xóa `backend/rescue_system.db`, chạy lại `generate_seed_data.py` |
+| Cổng 8000 / 8080 bận | Đổi cổng (`--port` uvicorn, `FRONTEND_PORT`) hoặc tắt process đang chiếm cổng |
+| Ảnh upload không hiển thị | Thư mục `backend/app/uploads/images/` phải tồn tại; backend mount `/uploads` |
+| Script `.sh` không chạy trên Windows CMD | Dùng **Git Bash**, **WSL**, hoặc chạy thủ công hai terminal (Cách 2) |
+
+---
+
+## Tài liệu liên quan
+
+- [README.md](./README.md) — mô tả nghiệp vụ & user stories  
+- [DETAIL_STRUCTURE.md](./DETAIL_STRUCTURE.md) — cấu trúc mã, API, routes UI  
+- [HOW_TO_RUN_TEST.md](./HOW_TO_RUN_TEST.md) — kiểm thử đầy đủ  
+- [TO_DO.md](./TO_DO.md) — backlog sprint  
+
+---
+
+*Rescue24 · Hệ thống hỗ trợ sự cố xe trên đường — ITSS*

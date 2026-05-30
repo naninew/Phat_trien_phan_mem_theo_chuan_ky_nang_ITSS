@@ -27,6 +27,7 @@ class NotificationResponse(BaseModel):
     request_id: Optional[int]
     title: str
     content: str
+    notification_type: str = "SYSTEM"
     is_read: bool
     sent_time: datetime
 

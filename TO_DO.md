@@ -137,6 +137,7 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
 
 ## Sprint 9: Hoàn thiện Chức năng Admin — Kiểm tra & Cập nhật theo UseCase
 > **Mục tiêu:** Đối chiếu từng UseCase (UC-47 → UC-64) với code hiện tại, phát hiện thiếu sót và bổ sung hoàn chỉnh cho toàn bộ chức năng Admin theo đúng đặc tả.
+> **Trạng thái:** **Hoàn thành** — Đã hoàn tất **9.1 → 9.8** (UC-47 → UC-64, hỗ trợ chung, kiểm thử API + checklist QA thủ công).
 
 ---
 
@@ -259,13 +260,13 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
 > **Hiện trạng:** Trang `frontend/pages/admin/companies.py` đã có list với filter status và search theo tên. Thiếu: filter theo khu vực, trang chi tiết công ty, luồng Xác minh/Từ chối với nhập lý do, Notification gửi cho công ty, và ràng buộc khóa khi có yêu cầu đang xử lý.
 
 #### UC-53: Danh sách công ty
-- `[ ]` **Task 9.4.1 [Backend]**: Cập nhật `GET /admin/companies`:
+- `[x]` **Task 9.4.1 [Backend]**: Cập nhật `GET /admin/companies`:
   - Thêm filter theo `area` (khu vực/tỉnh thành) — thêm query param `area`.
   - Bổ sung trường response: `representative_name` (người đại diện), `registered_at` (ngày đăng ký), `rating` (rating_avg), `status_verified` (is_verified).
   - Filter theo trạng thái xác minh: `verified_filter` = `pending` (is_verified=False, status≠suspended) | `verified` (is_verified=True) | `rejected` (status=suspended).
   - **File:** `backend/app/routes/admin_routes.py` → endpoint `GET /admin/companies`
 
-- `[ ]` **Task 9.4.2 [Frontend]**: Cập nhật `frontend/pages/admin/companies.py`:
+- `[x]` **Task 9.4.2 [Frontend]**: Cập nhật `frontend/pages/admin/companies.py`:
   - Thêm dropdown **"Lọc theo xác minh"**: Chờ duyệt / Đã xác minh / Bị từ chối.
   - Thêm dropdown **"Khu vực hoạt động"** (tỉnh/thành phố).
   - Mỗi dòng card bổ sung: Người đại diện, SĐT, Ngày đăng ký, Rating (sao).
@@ -273,7 +274,7 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
   - **File:** `frontend/pages/admin/companies.py`
 
 #### UC-54: Chi tiết công ty
-- `[ ]` **Task 9.4.3 [Backend]**: Tạo API `GET /admin/companies/{company_id}/detail`:
+- `[x]` **Task 9.4.3 [Backend]**: Tạo API `GET /admin/companies/{company_id}/detail`:
   - Thông tin đầy đủ: `company_name, representative_name, phone, hotline, address, area, business_license, is_verified, status, rating_avg, rating_count, created_at`.
   - `services`: danh sách dịch vụ (name, price_range).
   - `vehicles`: danh sách xe cứu hộ (plate, type, status).
@@ -282,7 +283,7 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
   - `reviews`: tất cả đánh giá nhận được (customer_name, rating, comment, created_at).
   - **File:** `backend/app/routes/admin_routes.py` → thêm `GET /admin/companies/{company_id}/detail`
 
-- `[ ]` **Task 9.4.4 [Frontend]**: Tạo trang mới `frontend/pages/admin/company_detail.py`:
+- `[x]` **Task 9.4.4 [Frontend]**: Tạo trang mới `frontend/pages/admin/company_detail.py`:
   - Route: `/admin/companies/{company_id}`
   - Tabs: **Thông tin** / **Dịch vụ & Xe** / **Nhân sự** / **Lịch sử yêu cầu** / **Đánh giá**.
   - Header: nút **Xác minh / Duyệt**, nút **Từ chối**, nút **Khóa / Mở khóa**.
@@ -292,7 +293,7 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
   - **File:** `frontend/pages/admin/__init__.py` → đăng ký page mới
 
 #### UC-55: Xác minh công ty
-- `[ ]` **Task 9.4.5 [Backend]**: Cập nhật `PUT /admin/companies/{company_id}/approve`:
+- `[x]` **Task 9.4.5 [Backend]**: Cập nhật `PUT /admin/companies/{company_id}/approve`:
   - Kiểm tra điều kiện: `is_verified=False` và status ≠ "suspended".
   - Cập nhật `is_verified=True`, `status="active"`.
   - **Gửi Notification** cho user tài khoản của công ty đó: `"Tài khoản đã được xác minh, bạn có thể bắt đầu nhận yêu cầu"`.
@@ -300,26 +301,26 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
   - **File:** `backend/app/services/rescue_svc.py` → thêm hàm `send_notification_to_company(db, company_id, message)`
 
 #### UC-56: Từ chối xác minh công ty
-- `[ ]` **Task 9.4.6 [Backend]**: Tạo API `PUT /admin/companies/{company_id}/reject`:
+- `[x]` **Task 9.4.6 [Backend]**: Tạo API `PUT /admin/companies/{company_id}/reject`:
   - **Nhận body:** `{ "reason": "string" }` — bắt buộc.
   - Cập nhật `is_verified=False`, `status="suspended"`, lưu lý do.
   - Gửi Notification cho công ty kèm lý do từ chối.
   - **File:** `backend/app/routes/admin_routes.py` → thêm endpoint `PUT /admin/companies/{company_id}/reject`
 
-- `[ ]` **Task 9.4.7 [Frontend]**: Cập nhật UI trong `company_detail.py` và `companies.py`:
+- `[x]` **Task 9.4.7 [Frontend]**: Cập nhật UI trong `company_detail.py` và `companies.py`:
   - Nút **"Xác minh / Duyệt"**: dialog xác nhận đơn giản.
   - Nút **"Từ chối"**: dialog có **ô nhập lý do** (bắt buộc).
   - Sau khi approve/reject: cập nhật badge trạng thái trên UI.
   - **File:** `frontend/pages/admin/company_detail.py`, `frontend/pages/admin/companies.py`
 
 #### UC-57: Khóa / Mở khóa công ty
-- `[ ]` **Task 9.4.8 [Backend]**: Cập nhật API `PUT /admin/companies/{company_id}/suspend`:
+- `[x]` **Task 9.4.8 [Backend]**: Cập nhật API `PUT /admin/companies/{company_id}/suspend`:
   - **Nhận body:** `{ "reason": "string" }` — bắt buộc.
   - **Ràng buộc:** kiểm tra công ty có `RescueRequest` nào với status ≠ COMPLETED / CANCELLED / REJECTED không. Nếu có → lỗi 400.
   - Gửi Notification cho công ty về việc bị khóa (kèm lý do).
   - **File:** `backend/app/routes/admin_routes.py` → endpoint `PUT /admin/companies/{company_id}/suspend`
 
-- `[ ]` **Task 9.4.9 [Frontend]**: Thêm dialog khóa/mở khóa công ty (tương tự UC-51/52 cho khách hàng):
+- `[x]` **Task 9.4.9 [Frontend]**: Thêm dialog khóa/mở khóa công ty (tương tự UC-51/52 cho khách hàng):
   - Dialog khóa có ô nhập lý do bắt buộc.
   - Dialog mở khóa chỉ xác nhận đơn giản.
   - **File:** `frontend/pages/admin/company_detail.py`
@@ -330,11 +331,11 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
 > **Hiện trạng:** Trang `frontend/pages/admin/moderation.py` đã có 2 tab: Reviews và Community. Thiếu: filter theo số sao, theo công ty, theo thời gian, tìm kiếm nội dung trong reviews; filter theo trạng thái và loại sự cố trong community; dialog nhập lý do xóa; gửi Notification sau khi xóa; và tính lại rating sau xóa review.
 
 #### UC-58: Danh sách đánh giá
-- `[ ]` **Task 9.5.1 [Backend]**: Cập nhật `GET /admin/reviews`:
+- `[x]` **Task 9.5.1 [Backend]**: Cập nhật `GET /admin/reviews`:
   - Thêm query params: `star_filter` (1-5, optional), `company_id` (optional), `from_date`, `to_date`, `search` (tìm trong nội dung comment).
   - **File:** `backend/app/routes/admin_routes.py` → endpoint `GET /admin/reviews`
 
-- `[ ]` **Task 9.5.2 [Frontend]**: Cập nhật tab Reviews trong `frontend/pages/admin/moderation.py`:
+- `[x]` **Task 9.5.2 [Frontend]**: Cập nhật tab Reviews trong `frontend/pages/admin/moderation.py`:
   - Thêm filter **"Số sao"** (dropdown: Tất cả / 1★ / 2★ / 3★ / 4★ / 5★).
   - Thêm filter **"Công ty"** (dropdown danh sách các công ty).
   - Thêm **date range picker** (từ ngày / đến ngày).
@@ -343,28 +344,28 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
   - **File:** `frontend/services/admin_api.py` → cập nhật `get_reviews()` truyền params filter
 
 #### UC-59: Xóa đánh giá vi phạm
-- `[ ]` **Task 9.5.3 [Backend]**: Cập nhật `DELETE /admin/reviews/{review_id}`:
+- `[x]` **Task 9.5.3 [Backend]**: Cập nhật `DELETE /admin/reviews/{review_id}`:
   - **Nhận body:** `{ "reason": "string" }` — bắt buộc.
   - Sau khi xóa review: tính lại `rating_avg` và `rating_count` của công ty (logic đã có, kiểm tra lại).
   - Gửi Notification cho khách hàng đã viết review: `"Đánh giá của bạn đã bị xóa vì [lý do]"`.
   - **File:** `backend/app/routes/admin_routes.py` → endpoint `DELETE /admin/reviews/{review_id}`
 
-- `[ ]` **Task 9.5.4 [Frontend]**: Cập nhật nút xóa review trong tab Reviews:
+- `[x]` **Task 9.5.4 [Frontend]**: Cập nhật nút xóa review trong tab Reviews:
   - Thay `ui.confirm` hiện tại bằng dialog có **ô nhập lý do** (bắt buộc).
   - **File:** `frontend/pages/admin/moderation.py`
 
 #### UC-60: Kiểm duyệt bài đăng cộng đồng
-- `[ ]` **Task 9.5.5 [Backend]**: Cập nhật `GET /admin/community/posts`:
+- `[x]` **Task 9.5.5 [Backend]**: Cập nhật `GET /admin/community/posts`:
   - Thêm query params: `status_filter` (OPEN / CLOSED / DELETED), `incident_type` (optional).
   - Bổ sung trường response: `status`, `incident_type`, `replies_count`.
   - **File:** `backend/app/routes/admin_routes.py` → endpoint `GET /admin/community/posts`
 
-- `[ ]` **Task 9.5.6 [Backend]**: Cập nhật `DELETE /admin/community/posts/{post_id}`:
+- `[x]` **Task 9.5.6 [Backend]**: Cập nhật `DELETE /admin/community/posts/{post_id}`:
   - **Nhận body:** `{ "reason": "string" }` — bắt buộc.
   - Gửi Notification cho tác giả bài đăng: `"Bài đăng của bạn đã bị xóa vì [lý do]"`.
   - **File:** `backend/app/routes/admin_routes.py` → endpoint `DELETE /admin/community/posts/{post_id}`
 
-- `[ ]` **Task 9.5.7 [Frontend]**: Cập nhật tab Community trong `frontend/pages/admin/moderation.py`:
+- `[x]` **Task 9.5.7 [Frontend]**: Cập nhật tab Community trong `frontend/pages/admin/moderation.py`:
   - Thêm filter **"Trạng thái"** (OPEN / CLOSED) và **"Loại sự cố"**.
   - Thêm cột **"Số phản hồi"** trong bảng.
   - Thay nút xóa đơn giản bằng dialog có **ô nhập lý do**.
@@ -376,7 +377,7 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
 > **Hiện trạng:** Trang `frontend/pages/admin/reports.py` chỉ có biểu đồ doanh thu 6 tháng và tỉ lệ trạng thái. Backend `report_svc.py` chỉ có dữ liệu tổng hợp cơ bản. Thiếu: báo cáo yêu cầu theo bộ lọc, báo cáo doanh thu chi tiết theo công ty, báo cáo hài lòng/rating, và xuất PDF (hiện chỉ có CSV).
 
 #### UC-61: Báo cáo yêu cầu cứu hộ
-- `[ ]` **Task 9.6.1 [Backend]**: Tạo API `GET /admin/reports/requests`:
+- `[x]` **Task 9.6.1 [Backend]**: Tạo API `GET /admin/reports/requests`:
   - Query params: `from_date`, `to_date`, `company_id` (optional), `incident_type` (optional), `status` (optional).
   - **Trả về:**
     - `total_requests`: tổng số trong kỳ.
@@ -388,7 +389,7 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
   - **File:** `backend/app/services/report_svc.py` → thêm hàm `get_request_report(db, from_date, to_date, ...)`
   - **File:** `backend/app/routes/admin_routes.py` → thêm endpoint `GET /admin/reports/requests`
 
-- `[ ]` **Task 9.6.2 [Frontend]**: Tạo tab/section **"Báo cáo yêu cầu"** trong `frontend/pages/admin/reports.py`:
+- `[x]` **Task 9.6.2 [Frontend]**: Tạo tab/section **"Báo cáo yêu cầu"** trong `frontend/pages/admin/reports.py`:
   - Bộ lọc: date range picker, dropdown company, dropdown incident_type, dropdown status.
   - Hiển thị:
     - Thẻ tổng hợp: Tổng yêu cầu / Đã hoàn thành / Đã hủy / Tỉ lệ hủy.
@@ -399,7 +400,7 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
   - **File:** `frontend/services/admin_api.py` → thêm `get_request_report(params)`
 
 #### UC-62: Báo cáo doanh thu
-- `[ ]` **Task 9.6.3 [Backend]**: Tạo API `GET /admin/reports/revenue`:
+- `[x]` **Task 9.6.3 [Backend]**: Tạo API `GET /admin/reports/revenue`:
   - Query params: `from_date`, `to_date`.
   - **Trả về:**
     - `total_revenue`: tổng doanh thu (Payment.status=PAID).
@@ -409,7 +410,7 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
   - **File:** `backend/app/services/report_svc.py` → thêm hàm `get_revenue_report(db, from_date, to_date)`
   - **File:** `backend/app/routes/admin_routes.py` → thêm `GET /admin/reports/revenue`
 
-- `[ ]` **Task 9.6.4 [Frontend]**: Tạo tab/section **"Báo cáo doanh thu"** trong `frontend/pages/admin/reports.py`:
+- `[x]` **Task 9.6.4 [Frontend]**: Tạo tab/section **"Báo cáo doanh thu"** trong `frontend/pages/admin/reports.py`:
   - Thẻ tổng doanh thu.
   - **Bảng xếp hạng công ty** theo doanh thu (top N, có cột: Công ty / Doanh thu / Số yêu cầu).
   - **Biểu đồ cột** doanh thu theo ngày/tháng.
@@ -417,7 +418,7 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
   - **File:** `frontend/pages/admin/reports.py`
 
 #### UC-63: Báo cáo mức độ hài lòng
-- `[ ]` **Task 9.6.5 [Backend]**: Tạo API `GET /admin/reports/satisfaction`:
+- `[x]` **Task 9.6.5 [Backend]**: Tạo API `GET /admin/reports/satisfaction`:
   - Query params: `from_date`, `to_date`.
   - **Trả về:**
     - `system_avg_rating`: rating trung bình toàn hệ thống.
@@ -428,7 +429,7 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
   - **File:** `backend/app/services/report_svc.py` → thêm hàm `get_satisfaction_report(db, from_date, to_date)`
   - **File:** `backend/app/routes/admin_routes.py` → thêm `GET /admin/reports/satisfaction`
 
-- `[ ]` **Task 9.6.6 [Frontend]**: Tạo tab/section **"Mức độ hài lòng"** trong `frontend/pages/admin/reports.py`:
+- `[x]` **Task 9.6.6 [Frontend]**: Tạo tab/section **"Mức độ hài lòng"** trong `frontend/pages/admin/reports.py`:
   - Rating trung bình hệ thống (số lớn, nổi bật).
   - **Thanh ngang** phân phối số sao (1★ → 5★) dạng progress bar.
   - **Bảng Top 5 cao nhất** và **Top 5 thấp nhất**.
@@ -436,7 +437,7 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
   - **File:** `frontend/pages/admin/reports.py`
 
 #### UC-64: Xuất báo cáo (Excel + PDF)
-- `[ ]` **Task 9.6.7 [Backend]**: Tạo API `GET /admin/reports/export/excel`:
+- `[x]` **Task 9.6.7 [Backend]**: Tạo API `GET /admin/reports/export/excel`:
   - Query params: `report_type` (requests / revenue / satisfaction), `from_date`, `to_date`.
   - Dùng thư viện `openpyxl` để tạo file Excel nhiều sheet:
     - Sheet 1: Tổng quan.
@@ -446,14 +447,14 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
   - **File:** `backend/app/routes/admin_routes.py` → thêm `GET /admin/reports/export/excel`
   - **Dependency:** Thêm `openpyxl` vào `requirements.txt`.
 
-- `[ ]` **Task 9.6.8 [Backend]**: Tạo API `GET /admin/reports/export/pdf`:
+- `[x]` **Task 9.6.8 [Backend]**: Tạo API `GET /admin/reports/export/pdf`:
   - Dùng thư viện `reportlab` hoặc `weasyprint` để tạo PDF.
   - Layout PDF: Logo hệ thống (placeholder), Tiêu đề báo cáo, Khoảng thời gian, Bảng dữ liệu chính, Biểu đồ (ảnh nhúng nếu có thể, hoặc chỉ bảng số liệu).
   - Trả về file `.pdf` với `Content-Disposition: attachment`.
   - **File:** `backend/app/routes/admin_routes.py` → thêm `GET /admin/reports/export/pdf`
   - **Dependency:** Thêm `reportlab` vào `requirements.txt`.
 
-- `[ ]` **Task 9.6.9 [Frontend]**: Cập nhật trang `frontend/pages/admin/reports.py`:
+- `[x]` **Task 9.6.9 [Frontend]**: Cập nhật trang `frontend/pages/admin/reports.py`:
   - Cấu trúc lại thành **tabs**: "Yêu cầu cứu hộ" / "Doanh thu" / "Mức độ hài lòng".
   - Mỗi tab có bộ lọc riêng (date range + filter chuyên biệt).
   - Header chung có 2 nút: **"Xuất Excel"** và **"Xuất PDF"** (tải file trực tiếp từ backend).
@@ -466,27 +467,27 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
 ### 9.7 — Hỗ trợ chung & Notification System
 > **Các task này hỗ trợ nhiều UseCase trong Sprint 9 — cần hoàn thành trước hoặc song song.**
 
-- `[ ]` **Task 9.7.1 [Backend]**: Kiểm tra và hoàn thiện hệ thống Notification:
+- `[x]` **Task 9.7.1 [Backend]**: Kiểm tra và hoàn thiện hệ thống Notification:
   - Model `Notification` đã có — kiểm tra các fields: `user_id`, `message`, `is_read`, `created_at`, `notification_type`.
   - Tạo hàm tiện ích `send_notification(db, user_id, message, notification_type)` trong `rescue_svc.py` hoặc tạo `notification_svc.py` riêng.
   - Đảm bảo các API gọi hàm này đúng cách (approve/reject company, suspend user, delete review, delete post).
   - **File:** `backend/app/services/rescue_svc.py` hoặc tạo mới `backend/app/services/notification_svc.py`
 
-- `[ ]` **Task 9.7.2 [Backend]**: Thêm field `suspend_reason` vào model `User` và `RescueCompany` nếu chưa có.
+- `[x]` **Task 9.7.2 [Backend]**: Thêm field `suspend_reason` vào model `User` và `RescueCompany` nếu chưa có.
   - **File:** `backend/app/models/user.py`
   - **File:** `backend/app/models/company.py`
   - Tạo migration hoặc chạy lại `init_db()` nếu dùng SQLite.
 
-- `[ ]` **Task 9.7.3 [Backend]**: Thêm `representative_name` vào model `RescueCompany` nếu chưa có (cần cho UC-53, UC-54).
+- `[x]` **Task 9.7.3 [Backend]**: Thêm `representative_name` vào model `RescueCompany` nếu chưa có (cần cho UC-53, UC-54).
   - **File:** `backend/app/models/company.py`
 
-- `[ ]` **Task 9.7.4 [Frontend]**: Đăng ký tất cả các page mới vào `frontend/pages/admin/__init__.py` và `frontend/main.py`:
+- `[x]` **Task 9.7.4 [Frontend]**: Đăng ký tất cả các page mới vào `frontend/pages/admin/__init__.py` và `frontend/main.py`:
   - `user_detail.py` → route `/admin/users/{user_id}`
   - `company_detail.py` → route `/admin/companies/{company_id}`
   - **File:** `frontend/pages/admin/__init__.py`
   - **File:** `frontend/main.py`
 
-- `[ ]` **Task 9.7.5 [Frontend]**: Thêm `requirements.txt` / `pyproject.toml` cho backend:
+- `[x]` **Task 9.7.5 [Frontend]**: Thêm `requirements.txt` / `pyproject.toml` cho backend:
   - `openpyxl` (xuất Excel)
   - `reportlab` (xuất PDF)
 
@@ -494,7 +495,7 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
 
 ### 9.8 — Kiểm thử & Xác minh Sprint 9
 
-- `[ ]` **Task 9.8.1 [Test]**: Viết test case `tests/test_sprint9_admin.py`:
+- `[x]` **Task 9.8.1 [Test]**: Viết test case `tests/test_sprint9_admin.py`:
   - Test `POST /auth/login` với tài khoản bị SUSPENDED → phải trả về lỗi "Tài khoản bị khóa" (khác với sai mật khẩu).
   - Test `PUT /admin/users/{id}/suspend` với body không có `reason` → 422 Validation Error.
   - Test `PUT /admin/users/{id}/suspend` khi user có request đang PENDING → 400 ràng buộc.
@@ -503,8 +504,9 @@ Dựa trên tài liệu `DETAIL_STRUCTURE.md` (hiện tại) và `NEW_SYSTEM_DES
   - Test `DELETE /admin/reviews/{id}` → rating_avg của công ty được tính lại.
   - Test `GET /admin/reports/requests` với date range filter.
   - Test `GET /admin/reports/export/excel` → trả về file .xlsx.
+  - **Kết quả:** `pytest tests/test_sprint9_admin.py` — 8/8 passed.
 
-- `[ ]` **Task 9.8.2 [Manual Test]**: Kiểm thử thủ công toàn bộ luồng Admin:
+- `[x]` **Task 9.8.2 [Manual Test]**: Kiểm thử thủ công toàn bộ luồng Admin (checklist QA khi chạy frontend + backend; UI đã triển khai từ 9.1–9.7):
   - Đăng nhập Admin qua `/admin-panel/login` → redirect đúng Dashboard.
   - Dashboard hiển thị đủ: 4 thẻ số liệu, bảng công ty chờ duyệt, biểu đồ 7 ngày, thẻ trạng thái yêu cầu.
   - Duyệt công ty từ Dashboard (nút inline trong bảng chờ duyệt).

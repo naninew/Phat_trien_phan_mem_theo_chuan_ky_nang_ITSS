@@ -24,14 +24,16 @@ def get_messages_by_request(db: Session, request_id: int) -> List[Message]:
     return db.query(Message).filter(Message.request_id == request_id).order_by(Message.sent_time.asc()).all()
 
 def create_notification(db: Session, receiver_id: int, title: str, content: str, request_id: Optional[int] = None) -> Notification:
-    notif = Notification(
-        receiver_id=receiver_id,
-        request_id=request_id,
+    from app.services import notification_svc
+
+    notif = notification_svc.send_notification(
+        db,
+        receiver_id,
+        content,
+        notification_type=notification_svc.NotificationType.SYSTEM,
         title=title,
-        content=content,
-        sent_time=datetime.utcnow()
+        request_id=request_id,
     )
-    db.add(notif)
     db.commit()
     db.refresh(notif)
     return notif

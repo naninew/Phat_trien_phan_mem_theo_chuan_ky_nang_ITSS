@@ -34,6 +34,7 @@ class Notification(Base):
     request_id = Column(Integer, ForeignKey("rescue_requests.id"), nullable=True)
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)
+    notification_type = Column(String(50), nullable=False, default="SYSTEM")
     is_read = Column(Boolean, default=False)
     sent_time = Column(DateTime, default=datetime.utcnow)
     

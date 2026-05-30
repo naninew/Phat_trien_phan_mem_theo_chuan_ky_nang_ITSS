@@ -51,6 +51,35 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
+def _migrate_sqlite_columns() -> None:
+    """Add new columns to existing SQLite tables (dev-friendly, no Alembic)."""
+    if not DATABASE_URL.startswith("sqlite"):
+        return
+
+    import sqlite3
+
+    conn = sqlite3.connect(_SQLITE_PATH)
+    cursor = conn.cursor()
+
+    def _has_column(table: str, column: str) -> bool:
+        cursor.execute(f"PRAGMA table_info({table})")
+        return any(row[1] == column for row in cursor.fetchall())
+
+    migrations = [
+        ("notifications", "notification_type", "VARCHAR(50) DEFAULT 'SYSTEM'"),
+        ("rescue_companies", "representative_name", "VARCHAR(100)"),
+        ("users", "suspend_reason", "VARCHAR(500)"),
+        ("rescue_companies", "suspend_reason", "TEXT"),
+    ]
+    for table, column, col_type in migrations:
+        if _has_column(table, column):
+            continue
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+
+    conn.commit()
+    conn.close()
+
+
 def init_db() -> None:
     """
     Create all tables. Safe to call multiple times (idempotent).
@@ -59,6 +88,7 @@ def init_db() -> None:
     # Import all models so metadata is populated before create_all
     from app.models import user, company, service, vehicle, staff, request, review, payment, community, communication, report  # noqa: F401
     Base.metadata.create_all(bind=engine)
+    _migrate_sqlite_columns()
     print(f"[DB] Connected to: {DATABASE_URL[:50]}...")
     print("[DB] Tables created/verified.")
 

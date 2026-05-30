@@ -15,6 +15,7 @@ class RescueCompany(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     company_name = Column(String(200), nullable=False)
+    representative_name = Column(String(100), nullable=True)
     address = Column(Text, nullable=False)
     hotline = Column(String(20), nullable=False)
     business_license = Column(String(50), unique=True, nullable=False)
@@ -31,6 +32,7 @@ class RescueCompany(Base):
     service_radius_km = Column(Float, default=20.0)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     is_verified = Column(Boolean, default=False)
+    suspend_reason = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
