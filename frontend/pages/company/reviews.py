@@ -39,8 +39,8 @@ def create_reviews_page():
                     with ui.row().classes("w-full justify-between items-start"):
                         with ui.column().classes("gap-2"):
                             with ui.row().classes("items-center gap-2"):
-                                ui.label(r['customer_name']).classes("font-bold text-lg")
-                                ui.label(f"• {r['service_name']}").classes("text-xs opacity-50")
+                                ui.label(r.get('customer_name', 'Khách hàng ẩn danh')).classes("font-bold text-lg")
+                                ui.label(f"• {r.get('service_name', 'Dịch vụ cứu hộ')}").classes("text-xs opacity-50")
                             
                             with ui.row().classes("gap-1"):
                                 for i in range(5):

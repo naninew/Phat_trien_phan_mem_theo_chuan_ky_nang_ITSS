@@ -275,9 +275,15 @@ async def toggle_company_service_status(service_id: int, is_active: bool) -> boo
     return r.get("success", False)
 
 async def get_company_reviews() -> List[Dict[str, Any]]:
-    # Using the existing full-details endpoint but extracting reviews
-    r = await api_client.get("/profile/company")
-    return r.get("data", {}).get("reviews", [])
+    # First get company_id
+    r_prof = await api_client.get("/profile/company")
+    company_data = r_prof.get("data")
+    if not company_data or "id" not in company_data:
+        return []
+    
+    company_id = company_data["id"]
+    r_det = await api_client.get(f"/rescue/companies/{company_id}/full-details")
+    return r_det.get("data", {}).get("reviews", [])
 
 async def reject_request(request_id: int) -> bool:
     r = await api_client.put(f"/rescue/requests/{request_id}/reject")

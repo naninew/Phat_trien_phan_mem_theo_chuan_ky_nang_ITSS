@@ -12,7 +12,7 @@ def create_sidebar():
     # Lấy đường dẫn hiện tại một cách chính xác (Ví dụ: '/', '/profile')
     current_route = ui.context.client.page.path
     
-    with ui.left_drawer(value=True).classes('bg-surface border-r border-surface-variant p-4 flex flex-col') as drawer:
+    with ui.left_drawer(value=True).classes('bg-white border-r border-gray-100 p-4 flex flex-col') as drawer:
         with ui.column().classes('w-full gap-2 flex-1'):
             
             if role == 'customer':
@@ -50,29 +50,29 @@ def create_sidebar():
         ui.separator().classes('my-2')
         with ui.row().classes(
             'w-full items-center gap-3 px-4 py-3 rounded-xl cursor-pointer '
-            'hover:bg-red-50 group'
+            'hover:bg-red-50 transition-colors group'
         ).on('click', _confirm_logout_sidebar):
-            ui.icon('logout', size='1.5rem').classes('text-red-400 group-hover:text-red-600')
-            ui.label('Đăng Xuất').classes('font-medium text-red-400 group-hover:text-red-600')
+            ui.icon('logout', size='1.5rem').classes('text-red-400 group-hover:text-red-600 transition-colors')
+            ui.label('Đăng Xuất').classes('font-semibold text-red-400 group-hover:text-red-600 transition-colors')
 
     return drawer
 
 
 def _confirm_logout_sidebar():
     """Confirm dialog before logout (from sidebar)."""
-    with ui.dialog() as dlg, ui.card().classes('rounded-2xl p-6 shadow-2xl w-80'):
-        with ui.column().classes('w-full items-center gap-4'):
-            ui.icon('logout', size='3rem').classes('text-red-500')
-            ui.label('Xác nhận đăng xuất?').classes('text-xl font-bold text-gray-800')
+    with ui.dialog() as dlg, ui.card().classes('rounded-3xl p-8 shadow-2xl w-[400px]'):
+        with ui.column().classes('w-full items-center gap-3'):
+            ui.icon('logout', size='3.5rem').classes('text-red-500 mb-2')
+            ui.label('Xác nhận đăng xuất?').classes('text-2xl font-bold text-slate-800 font-outfit')
             ui.label(
                 'Bạn sẽ được chuyển về trang đăng nhập. Phiên làm việc hiện tại sẽ bị xóa.'
-            ).classes('text-sm text-gray-500 text-center')
-            with ui.row().classes('w-full gap-3 mt-2'):
+            ).classes('text-sm text-gray-500 text-center mb-4 leading-relaxed')
+            with ui.row().classes('w-full gap-3'):
                 ui.button('Hủy', on_click=dlg.close).props('no-caps flat').classes(
-                    'flex-1 border border-gray-300 text-gray-600 rounded-xl font-semibold'
+                    'flex-1 border border-gray-200 hover:bg-gray-50 text-slate-600 rounded-xl font-bold py-3 transition-colors'
                 )
                 ui.button('Đăng Xuất', icon='logout', on_click=logout_user).props('no-caps').classes(
-                    'flex-1 bg-red-600 text-white rounded-xl font-bold shadow'
+                    'flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold py-3 shadow-md transition-colors'
                 )
     dlg.open()
 
@@ -82,15 +82,17 @@ def _nav_item(label, icon, target, current_route):
     route_clean = current_route if current_route else '/'
     target_clean = target if target else '/'
     is_active = (route_clean == target_clean)
-    base_classes = 'w-full items-center gap-3 px-4 py-3 rounded-xl cursor-pointer font-medium text-on-surface'
+    base_classes = 'w-full items-center gap-3 px-4 py-3 rounded-xl cursor-pointer font-medium transition-colors group'
     
     if is_active:
-        row_classes = f'{base_classes} bg-primary/15'
-        icon_classes = 'text-primary'
+        row_classes = f'{base_classes} bg-blue-50'
+        text_classes = 'text-blue-700 font-bold'
+        icon_classes = 'text-blue-600'
     else:
-        row_classes = f'{base_classes} bg-transparent hover:bg-primary/10'
-        icon_classes = 'text-on-surface-variant'
+        row_classes = f'{base_classes} bg-transparent hover:bg-slate-50'
+        text_classes = 'text-slate-600 group-hover:text-slate-800'
+        icon_classes = 'text-slate-400 group-hover:text-slate-600 transition-colors'
 
     with ui.row().classes(row_classes).on('click', lambda t=target: ui.navigate.to(t)):
         ui.icon(icon, size='1.5rem').classes(icon_classes)
-        ui.label(label)
+        ui.label(label).classes(text_classes)
