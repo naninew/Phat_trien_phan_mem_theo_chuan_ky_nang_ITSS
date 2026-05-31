@@ -149,12 +149,15 @@ async def update_request_status(
     new_status: str,
     vehicle_id: Optional[int] = None,
     eta_minutes: Optional[int] = None,
+    agreed_price: Optional[float] = None,
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = {"status": new_status}
     if vehicle_id:
         payload["vehicle_id"] = vehicle_id
     if eta_minutes:
         payload["eta_minutes"] = eta_minutes
+    if agreed_price is not None:
+        payload["agreed_price"] = agreed_price
     r = await api_client.put(f"/rescue/requests/{request_id}/status", data=payload)
     return r.get("data", {})
 

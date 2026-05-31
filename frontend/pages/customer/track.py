@@ -627,6 +627,17 @@ def create_track_page() -> None:
                     ).classes("w-full rounded-2xl font-bold py-4").props(
                         "outline color=negative"
                     )
+                elif req["status"] == "COMPLETED":
+                    price = req.get("agreed_price")
+                    with ui.card().classes("w-full rounded-[28px] border-2 border-emerald-500 bg-emerald-50 p-6 shadow-lg"):
+                        with ui.column().classes("w-full items-center text-center gap-2"):
+                            ui.icon("check_circle", size="3rem").classes("text-emerald-500")
+                            ui.label("Cứu Hộ Hoàn Tất").classes("text-xl font-bold text-emerald-700")
+                            if price is not None:
+                                ui.label("Số tiền thanh toán:").classes("text-sm text-emerald-600 mt-2")
+                                ui.label(f"{price:,.0f} đ").classes("text-3xl font-bold text-emerald-800")
+                            else:
+                                ui.label("Đang chờ cập nhật chi phí...").classes("italic opacity-70")
 
         async def confirm_cancel() -> None:
             with ui.dialog() as dlg, ui.card().classes("p-8 rounded-[28px] w-[420px]"):
