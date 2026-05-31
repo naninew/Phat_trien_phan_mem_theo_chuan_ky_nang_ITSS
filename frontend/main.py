@@ -46,7 +46,7 @@ from pages.company.staff import create_staff_page
 from pages.company.fleet import create_fleet_page
 from pages.company.services_mgmt import create_services_management_page
 from pages.company.reviews import create_reviews_page
-from pages.company.profile import create_profile_page
+from pages.company.profile import create_profile_page as create_company_profile_page
 from pages.admin import register_admin_pages
 from pages.shared.profile_page import create_profile_page
 
@@ -287,7 +287,7 @@ def setup_app():
     create_fleet_page()
     create_services_management_page()
     create_reviews_page()
-    create_profile_page()
+    create_company_profile_page()
     
     # 4. Admin pages
     register_admin_pages()

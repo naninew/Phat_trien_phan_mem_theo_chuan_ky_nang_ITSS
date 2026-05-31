@@ -238,26 +238,37 @@ async def delete_company_staff(staff_id: int) -> bool:
     return r.get("success", False)
 
 async def get_company_services() -> List[Dict[str, Any]]:
-    # Note: Backend might need a specific endpoint for company's own services with prices
-    # For now, we list services then filter or use a more specific endpoint if exists.
-    # Let's check backend/app/routes/rescue_routes.py:43 (create_service)
-    # Actually, companies usually need to see their OWN services with prices.
-    # Let's assume there's a list_company_services endpoint or we use get_company_full_details
-    r = await api_client.get("/profile/company")
-    return r.get("data", {}).get("services", [])
+    r = await api_client.get("/rescue/company/services")
+    return r.get("data", [])
 
-async def add_company_service(service_name: str, base_price: float) -> Dict[str, Any]:
-    payload = {"service_name": service_name, "base_price": base_price}
-    r = await api_client.post("/rescue/services", data=payload)
+async def add_company_service(service_name: str, base_price: float, estimated_duration: int = 0, description: str = "", is_active: bool = True) -> Dict[str, Any]:
+    payload = {
+        "service_name": service_name,
+        "base_price": base_price,
+        "estimated_duration": estimated_duration,
+        "description": description,
+        "is_active": is_active
+    }
+    r = await api_client.post("/rescue/company/services", data=payload)
     return r.get("data", {})
 
-async def update_company_service(service_id: int, base_price: float, is_active: bool = True) -> bool:
-    payload = {"base_price": base_price, "is_active": is_active}
-    r = await api_client.put(f"/rescue/services/{service_id}", data=payload)
+async def update_company_service(service_id: int, service_name: str, base_price: float, estimated_duration: int = 0, description: str = "") -> bool:
+    payload = {
+        "service_name": service_name,
+        "base_price": base_price,
+        "estimated_duration": estimated_duration,
+        "description": description
+    }
+    r = await api_client.put(f"/rescue/company/services/{service_id}", data=payload)
     return r.get("success", False)
 
 async def delete_company_service(service_id: int) -> bool:
-    r = await api_client.delete(f"/rescue/services/{service_id}")
+    r = await api_client.delete(f"/rescue/company/services/{service_id}")
+    return r.get("success", False)
+
+async def toggle_company_service_status(service_id: int, is_active: bool) -> bool:
+    action = "activate" if is_active else "deactivate"
+    r = await api_client.patch(f"/rescue/company/services/{service_id}/{action}")
     return r.get("success", False)
 
 async def get_company_reviews() -> List[Dict[str, Any]]:

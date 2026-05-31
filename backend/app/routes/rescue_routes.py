@@ -11,7 +11,8 @@ from app.database import get_db
 from app.schemas.rescue import (
     RescueRequestCreate,
     RescueRequestUpdate,
-    ServiceCreate,
+    RescueServiceCreate,
+    RescueServiceUpdate,
     RescueVehicleCreate,
     RescueVehicleUpdate,
     RescueStaffCreate,
@@ -66,13 +67,72 @@ def list_services(db: Session = Depends(get_db)):
 )
 
 
-@router.post("/services")
-def create_service(
-    service_data: ServiceCreate,
+@router.get("/company/services")
+def list_company_services(
     db: Session = Depends(get_db),
     current_user: dict = Depends(auth_svc.get_current_user_from_token),
 ):
-    """Tạo dịch vụ mới cho công ty (chỉ company_staff)."""
+    """Lấy danh sách dịch vụ của công ty."""
+    if current_user.get("role") not in ("company_staff", "admin"):
+        raise HTTPException(status_code=403, detail="Chỉ company staff mới có thể xem dịch vụ của công ty")
+    
+    company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Không tìm thấy profile công ty")
+        
+    services = rescue_svc.get_services_by_company(db, company.id)
+    return success_response(
+        data=[
+            {
+                "service_id": s.id,
+                "company_id": s.company_id,
+                "service_name": s.service_name,
+                "description": s.description,
+                "base_price": s.base_price,
+                "estimated_duration": s.estimated_duration,
+                "is_active": s.is_active
+            }
+            for s in services
+        ],
+        message="Success"
+    )
+
+@router.get("/company/services/{service_id}")
+def get_company_service(
+    service_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    if current_user.get("role") not in ("company_staff", "admin"):
+        raise HTTPException(status_code=403, detail="Chỉ company staff mới có quyền này")
+    company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Không tìm thấy profile công ty")
+        
+    svc = rescue_svc.get_service_by_id(db, service_id, company.id)
+    if not svc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy dịch vụ")
+        
+    return success_response(
+        data={
+            "service_id": svc.id,
+            "company_id": svc.company_id,
+            "service_name": svc.service_name,
+            "description": svc.description,
+            "base_price": svc.base_price,
+            "estimated_duration": svc.estimated_duration,
+            "is_active": svc.is_active
+        },
+        message="Success"
+    )
+
+@router.post("/company/services")
+def create_service(
+    service_data: RescueServiceCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    """Tạo dịch vụ mới cho công ty."""
     if current_user.get("role") not in ("company_staff", "admin"):
         raise HTTPException(status_code=403, detail="Chỉ company staff mới có thể thêm dịch vụ")
 
@@ -82,14 +142,14 @@ def create_service(
 
     svc = rescue_svc.create_service(db, company.id, service_data)
     return success_response(
-        data={"id": svc.id, "service_name": svc.service_name},
+        data={"service_id": svc.id, "service_name": svc.service_name},
         message="Tạo dịch vụ thành công",
     )
 
-@router.put("/services/{service_id}")
+@router.put("/company/services/{service_id}")
 def update_service(
     service_id: int,
-    service_data: dict,
+    service_data: RescueServiceUpdate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(auth_svc.get_current_user_from_token),
 ):
@@ -98,12 +158,13 @@ def update_service(
     company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
     if not company:
         raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
+        
     svc = rescue_svc.update_service(db, company.id, service_id, service_data)
     if not svc:
         raise HTTPException(status_code=404, detail="Không tìm thấy dịch vụ")
-    return success_response(data={"id": svc.id, "service_name": svc.service_name}, message="Cập nhật thành công")
+    return success_response(data={"service_id": svc.id, "service_name": svc.service_name}, message="Cập nhật thành công")
 
-@router.delete("/services/{service_id}")
+@router.delete("/company/services/{service_id}")
 def delete_service(
     service_id: int,
     db: Session = Depends(get_db),
@@ -117,6 +178,36 @@ def delete_service(
     if not ok:
         raise HTTPException(status_code=404, detail="Không tìm thấy dịch vụ")
     return success_response(data={}, message="Đã xóa dịch vụ")
+
+@router.patch("/company/services/{service_id}/activate")
+def activate_service(
+    service_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
+
+    svc = rescue_svc.set_service_active_status(db, service_id, company.id, True)
+    if not svc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy dịch vụ")
+    return success_response(data={"service_id": svc.id, "is_active": svc.is_active}, message="Đã kích hoạt dịch vụ")
+
+@router.patch("/company/services/{service_id}/deactivate")
+def deactivate_service(
+    service_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
+    if not company:
+        raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
+
+    svc = rescue_svc.set_service_active_status(db, service_id, company.id, False)
+    if not svc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy dịch vụ")
+    return success_response(data={"service_id": svc.id, "is_active": svc.is_active}, message="Đã vô hiệu hóa dịch vụ")
 
 
 @router.post("/company/profile")

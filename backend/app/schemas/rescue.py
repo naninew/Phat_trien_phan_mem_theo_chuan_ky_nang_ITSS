@@ -20,12 +20,13 @@ class RescueCompanyCreate(BaseModel):
     service_radius_km: Optional[float] = 20.0
 
 
-class ServiceCreate(BaseModel):
+class RescueServiceCreate(BaseModel):
     """Schema for creating a new service."""
     service_name: str = Field(..., min_length=1, max_length=100)
-    base_price: float = Field(..., gt=0)
-    estimated_duration: int = Field(..., gt=0)  # minutes
+    base_price: float = Field(..., ge=0)
+    estimated_duration: Optional[int] = Field(0, ge=0)  # minutes
     description: Optional[str] = None
+    is_active: Optional[bool] = True
     
     class Config:
         json_schema_extra = {
@@ -33,14 +34,22 @@ class ServiceCreate(BaseModel):
                 "service_name": "Vá lốp",
                 "base_price": 150000.0,
                 "estimated_duration": 30,
-                "description": "Dịch vụ vá lốp xe máy và ô tô"
+                "description": "Dịch vụ vá lốp xe máy và ô tô",
+                "is_active": True
             }
         }
 
+class RescueServiceUpdate(BaseModel):
+    """Schema for updating a service."""
+    service_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    base_price: Optional[float] = Field(None, ge=0)
+    estimated_duration: Optional[int] = Field(None, ge=0)
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
 
-class ServiceResponse(BaseModel):
+class RescueServiceResponse(BaseModel):
     """Schema for service response."""
-    id: int
+    service_id: int = Field(alias="id")
     service_name: str
     base_price: float
     estimated_duration: int
@@ -50,6 +59,7 @@ class ServiceResponse(BaseModel):
     
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 class RescueRequestCreate(BaseModel):
@@ -155,7 +165,7 @@ class CompanyNearbyResponse(BaseModel):
     distance_km: float
     estimated_price: float
     eta_minutes: int
-    services: List[ServiceResponse]
+    services: List[RescueServiceResponse]
     
     class Config:
         from_attributes = True

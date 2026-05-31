@@ -23,11 +23,25 @@ class UserProfileUpdate(BaseModel):
     email: Optional[str] = None
     address: Optional[str] = None
 
+class CompanyProfileCreate(BaseModel):
+    company_name: str
+    business_license: str
+    address: str
+    hotline: str
+    operating_area: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    description: Optional[str] = None
+
 class CompanyProfileUpdate(BaseModel):
     company_name: Optional[str] = None
+    business_license: Optional[str] = None
     address: Optional[str] = None
     hotline: Optional[str] = None
-    service_radius_km: Optional[float] = None
+    operating_area: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    description: Optional[str] = None
 
 router = APIRouter(prefix="/profile", tags=["Profile Management"])
 
@@ -228,6 +242,95 @@ def upload_avatar(
     )
 
 
+@router.get("/company", response_model=dict)
+def get_company_profile(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_from_token),
+) -> dict:
+    """
+    Get company profile (for company staff users only).
+    """
+    user_id = current_user["user_id"]
+    user = auth_svc.get_user_by_id(db, user_id)
+    
+    if not user or user.role.value != "company_staff":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only company staff can access company profile"
+        )
+    
+    company = rescue_svc.get_company_by_owner_id(db, user_id)
+    if not company or company.status in ["deleted", "inactive"]:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company profile not found"
+        )
+    
+    return success_response(
+        data={
+            "id": company.id,
+            "company_name": company.company_name,
+            "business_license": company.business_license,
+            "address": company.address,
+            "hotline": company.hotline,
+            "operating_area": company.operating_area,
+            "latitude": company.latitude,
+            "longitude": company.longitude,
+            "rating_avg": company.rating_avg,
+            "description": company.description,
+            "is_verified": company.is_verified,
+            "status": company.status,
+        },
+        message="Success"
+    )
+
+@router.post("/company", response_model=dict)
+def create_company_profile(
+    profile_data: CompanyProfileCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_from_token),
+) -> dict:
+    """
+    Create company profile.
+    """
+    user_id = current_user["user_id"]
+    user = auth_svc.get_user_by_id(db, user_id)
+    
+    if not user or user.role.value != "company_staff":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only company staff can create company profile"
+        )
+    
+    existing = rescue_svc.get_company_by_owner_id(db, user_id)
+    if existing and existing.status not in ["deleted", "inactive"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Company profile already exists"
+        )
+    
+    # If exists but deleted, we might want to restore or create a new one.
+    # For now, we just create.
+    company = rescue_svc.create_company_profile(db, user_id, profile_data)
+    
+    return success_response(
+        data={
+            "id": company.id,
+            "company_name": company.company_name,
+            "business_license": company.business_license,
+            "address": company.address,
+            "hotline": company.hotline,
+            "operating_area": company.operating_area,
+            "latitude": company.latitude,
+            "longitude": company.longitude,
+            "rating_avg": company.rating_avg,
+            "description": company.description,
+            "is_verified": company.is_verified,
+            "status": company.status,
+        },
+        message="Company profile created successfully"
+    )
+
 @router.put("/company", response_model=dict)
 def update_company_profile(
     profile_data: CompanyProfileUpdate,
@@ -235,7 +338,7 @@ def update_company_profile(
     current_user: dict = Depends(get_current_user_from_token),
 ) -> dict:
     """
-    Update company profile (for company staff users only).
+    Update company profile.
     """
     user_id = current_user["user_id"]
     user = auth_svc.get_user_by_id(db, user_id)
@@ -247,7 +350,7 @@ def update_company_profile(
         )
     
     company = rescue_svc.get_company_by_owner_id(db, user_id)
-    if not company:
+    if not company or company.status in ["deleted", "inactive"]:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Company profile not found"
@@ -256,12 +359,20 @@ def update_company_profile(
     # Update fields if provided
     if profile_data.company_name is not None:
         company.company_name = profile_data.company_name
+    if profile_data.business_license is not None:
+        company.business_license = profile_data.business_license
     if profile_data.address is not None:
         company.address = profile_data.address
     if profile_data.hotline is not None:
         company.hotline = profile_data.hotline
-    if profile_data.service_radius_km is not None:
-        company.service_radius_km = profile_data.service_radius_km
+    if profile_data.operating_area is not None:
+        company.operating_area = profile_data.operating_area
+    if profile_data.latitude is not None:
+        company.latitude = profile_data.latitude
+    if profile_data.longitude is not None:
+        company.longitude = profile_data.longitude
+    if profile_data.description is not None:
+        company.description = profile_data.description
     
     db.commit()
     db.refresh(company)
@@ -270,11 +381,49 @@ def update_company_profile(
         data={
             "id": company.id,
             "company_name": company.company_name,
+            "business_license": company.business_license,
             "address": company.address,
             "hotline": company.hotline,
-            "service_radius_km": company.service_radius_km,
+            "operating_area": company.operating_area,
+            "latitude": company.latitude,
+            "longitude": company.longitude,
+            "rating_avg": company.rating_avg,
+            "description": company.description,
+            "is_verified": company.is_verified,
+            "status": company.status,
         },
         message="Company profile updated successfully"
+    )
+
+@router.delete("/company", response_model=dict)
+def delete_company_profile(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_from_token),
+) -> dict:
+    """
+    Soft delete company profile.
+    """
+    user_id = current_user["user_id"]
+    user = auth_svc.get_user_by_id(db, user_id)
+    
+    if not user or user.role.value != "company_staff":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only company staff can delete company profile"
+        )
+    
+    company = rescue_svc.get_company_by_owner_id(db, user_id)
+    if not company or company.status in ["deleted", "inactive"]:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company profile not found"
+        )
+        
+    rescue_svc.soft_delete_company(db, company.id)
+    
+    return success_response(
+        data={},
+        message="Company profile deleted successfully"
     )
 
 # ──────────────────────────────────────────────────────────────────────────────

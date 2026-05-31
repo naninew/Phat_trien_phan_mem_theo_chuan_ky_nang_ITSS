@@ -18,7 +18,7 @@ from app.models.service import Service
 from app.models.vehicle import RescueVehicle, Vehicle
 from app.models.staff import RescueStaff, StaffStatus
 from app.schemas.rescue import (
-    RescueRequestCreate, ServiceCreate, 
+    RescueRequestCreate, RescueServiceCreate, RescueServiceUpdate,
     RescueVehicleCreate, RescueVehicleUpdate, CustomerVehicleCreate, CustomerVehicleUpdate,
     RescueStaffCreate, RescueStaffUpdate, ServiceAssignmentCreate, PaymentCreate,
     RescueCompanyCreate
@@ -90,7 +90,7 @@ def get_all_companies(
     return q.order_by(RescueCompany.created_at.desc()).all()
 
 
-def create_company_profile(db: Session, owner_id: int, data: RescueCompanyCreate) -> RescueCompany:
+def create_company_profile(db: Session, owner_id: int, data: any) -> RescueCompany:
     """Tạo profile công ty mới cho owner."""
     from app.models.user import User
 
@@ -106,7 +106,7 @@ def create_company_profile(db: Session, owner_id: int, data: RescueCompanyCreate
         description=data.description,
         latitude=data.latitude,
         longitude=data.longitude,
-        service_radius_km=data.service_radius_km or 20.0,
+        rating_avg=0.0,
         status="pending",
         is_verified=False
     )
@@ -114,6 +114,14 @@ def create_company_profile(db: Session, owner_id: int, data: RescueCompanyCreate
     db.commit()
     db.refresh(company)
     return company
+
+def soft_delete_company(db: Session, company_id: int) -> bool:
+    company = get_company_by_id(db, company_id)
+    if not company:
+        return False
+    company.status = "deleted"
+    db.commit()
+    return True
 
 
 def find_nearby_companies(
@@ -167,28 +175,32 @@ def get_services_by_company(db: Session, company_id: int) -> List[Service]:
     return db.query(Service).filter(Service.company_id == company_id).all()
 
 
-def create_service(db: Session, company_id: int, service_data: ServiceCreate) -> Service:
+def get_service_by_id(db: Session, service_id: int, company_id: int) -> Optional[Service]:
+    return db.query(Service).filter(Service.id == service_id, Service.company_id == company_id).first()
+
+def create_service(db: Session, company_id: int, service_data: RescueServiceCreate) -> Service:
     svc = Service(
         service_name=service_data.service_name,
         base_price=service_data.base_price,
         estimated_duration=service_data.estimated_duration,
         description=service_data.description,
         company_id=company_id,
-        is_active=True,
+        is_active=service_data.is_active if service_data.is_active is not None else True,
     )
     db.add(svc)
     db.commit()
     db.refresh(svc)
     return svc
 
-def update_service(db: Session, company_id: int, service_id: int, data: dict) -> Optional[Service]:
+def update_service(db: Session, company_id: int, service_id: int, data: RescueServiceUpdate) -> Optional[Service]:
     svc = db.query(Service).filter(Service.id == service_id, Service.company_id == company_id).first()
     if not svc:
         return None
-    if "service_name" in data: svc.service_name = data["service_name"]
-    if "base_price" in data: svc.base_price = data["base_price"]
-    if "estimated_duration" in data: svc.estimated_duration = data["estimated_duration"]
-    if "description" in data: svc.description = data["description"]
+    if data.service_name is not None: svc.service_name = data.service_name
+    if data.base_price is not None: svc.base_price = data.base_price
+    if data.estimated_duration is not None: svc.estimated_duration = data.estimated_duration
+    if data.description is not None: svc.description = data.description
+    if data.is_active is not None: svc.is_active = data.is_active
     db.commit()
     db.refresh(svc)
     return svc
@@ -198,9 +210,29 @@ def delete_service(db: Session, service_id: int, company_id: int) -> bool:
     svc = db.query(Service).filter(Service.id == service_id, Service.company_id == company_id).first()
     if not svc:
         return False
-    db.delete(svc)
+    
+    # Check if linked to any RequestService
+    from app.models.request import RequestService
+    linked = db.query(RequestService).filter(RequestService.service_id == service_id).first()
+    
+    if linked:
+        # Soft delete
+        svc.is_active = False
+    else:
+        # Hard delete
+        db.delete(svc)
+        
     db.commit()
     return True
+
+def set_service_active_status(db: Session, service_id: int, company_id: int, is_active: bool) -> Optional[Service]:
+    svc = db.query(Service).filter(Service.id == service_id, Service.company_id == company_id).first()
+    if not svc:
+        return None
+    svc.is_active = is_active
+    db.commit()
+    db.refresh(svc)
+    return svc
 
 
 # ──────────────────────────────────────────────────────────────────────────────

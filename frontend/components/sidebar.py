@@ -43,7 +43,7 @@ def create_sidebar():
             # Profile link — route depends on role
             if role == 'admin':
                 _nav_item('Thông Tin Tài Khoản', 'manage_accounts', '/admin/profile', current_route)
-            else:
+            elif role == 'customer':
                 _nav_item('Hồ Sơ Cá Nhân', 'person', '/profile', current_route)
 
         # ── Logout button pinned at the bottom ─────────────────────────────

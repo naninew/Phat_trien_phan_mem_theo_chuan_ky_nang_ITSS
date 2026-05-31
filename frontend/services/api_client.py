@@ -56,6 +56,20 @@ class APIClient:
                 return {"success": False, "message": str(e)}
 
     @staticmethod
+    async def patch(endpoint: str, data: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.patch(
+                    f"{BACKEND_URL}{endpoint}",
+                    json=data,
+                    params=params,
+                    headers=APIClient.get_headers()
+                )
+                return APIClient._handle_response(response)
+            except Exception as e:
+                return {"success": False, "message": str(e)}
+
+    @staticmethod
     async def delete(
         endpoint: str,
         params: Optional[Dict[str, Any]] = None,
@@ -63,7 +77,8 @@ class APIClient:
     ) -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.delete(
+                response = await client.request(
+                    "DELETE",
                     f"{BACKEND_URL}{endpoint}",
                     params=params,
                     json=data,
