@@ -102,7 +102,8 @@ def create_company_dashboard():
                 except Exception as e:
                     print(f"Dashboard refresh error: {e}")
 
-            ui.timer(15, refresh_dashboard)
+            timer = ui.timer(15, refresh_dashboard)
+            ui.context.client.on_disconnect(timer.deactivate)
             await refresh_dashboard()
 
     def _kpi_card(title, value, icon, style):

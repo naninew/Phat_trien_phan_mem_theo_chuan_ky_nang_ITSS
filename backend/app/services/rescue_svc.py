@@ -384,6 +384,7 @@ def update_request_status(
     status: str,
     eta_minutes: Optional[int] = None,
     agreed_price: Optional[float] = None,
+    invoice_description: Optional[str] = None,
 ) -> Optional[RescueRequest]:
     req = get_request_by_id(db, request_id)
     if not req:
@@ -395,6 +396,8 @@ def update_request_status(
         req.eta_minutes = eta_minutes
     if agreed_price is not None:
         req.agreed_price = agreed_price
+    if invoice_description is not None:
+        req.invoice_description = invoice_description
 
     if status == RequestStatus.ON_THE_WAY:
         # Tùy chọn logic thêm khi đang trên đường

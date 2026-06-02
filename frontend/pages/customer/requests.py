@@ -401,6 +401,13 @@ def create_requests_page():
                                             "text-xs uppercase text-gray-400"
                                         )
 
+                                        if r.get("invoice_description"):
+                                            ui.label(
+                                                r["invoice_description"]
+                                            ).classes(
+                                                "text-xs text-emerald-700 italic max-w-[200px] text-right truncate"
+                                            ).tooltip(r["invoice_description"])
+
                             # =============================================
                             # INFO GRID
                             # =============================================
@@ -582,7 +589,8 @@ def create_requests_page():
 
         await _load_data()
 
-        ui.timer(
+        timer = ui.timer(
             30,
             _load_data
         )
+        ui.context.client.on_disconnect(timer.deactivate)

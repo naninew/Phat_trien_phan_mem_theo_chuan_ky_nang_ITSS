@@ -49,6 +49,7 @@ class RescueRequest(Base):
     
     # Payment
     agreed_price = Column(Float)
+    invoice_description = Column(Text, nullable=True)
     payment_status = Column(String(20), default="unpaid")  # unpaid, paid, refunded
     payment_method = Column(String(50))  # cash, momo, vnpay, card
     

@@ -520,16 +520,27 @@ def create_queue_page():
                     "text-2xl font-bold mb-6 font-outfit text-primary"
                 )
                 price = ui.number(
-                    label="Giá thực tế (VNĐ)", value=req.get('agreed_price', 200000)
-                ).classes("w-full mb-8").props("outlined rounded")
+                    label="Giá thực tế (VNĐ)", value=req.get('agreed_price')
+                ).classes("w-full mb-4").props("outlined rounded")
+                
+                desc = ui.textarea(
+                    label="Mô tả chi tiết hoá đơn", placeholder="Vd: Vá 2 lốp, thay 1 ruột..."
+                ).classes("w-full mb-8").props("outlined rounded rows=3")
 
                 with ui.row().classes("w-full justify-end gap-3"):
                     ui.button("HỦY", on_click=d.close).props("flat")
 
                     async def complete():
+                        if price.value is None or price.value == "":
+                            ui.notify("Vui lòng nhập bổ sung giá tiền dịch vụ", type="negative")
+                            return
+                        if not desc.value or not desc.value.strip():
+                            ui.notify("Vui lòng nhập mô tả chi tiết hoá đơn", type="negative")
+                            return
+                            
                         try:
                             await update_request_status(
-                                req['id'], 'COMPLETED', agreed_price=price.value
+                                req['id'], 'COMPLETED', agreed_price=price.value, invoice_description=desc.value.strip()
                             )
                             ui.notify("Đã hoàn thành yêu cầu cứu hộ", type="positive")
                             d.close()
@@ -559,4 +570,5 @@ def create_queue_page():
                 ui.notify(f"Lỗi: {e}", type="negative")
 
         await _load_data()
-        ui.timer(15, _load_data)
+        timer = ui.timer(15, _load_data)
+        ui.context.client.on_disconnect(timer.deactivate)

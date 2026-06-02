@@ -96,6 +96,7 @@ class RescueRequestUpdate(BaseModel):
     status: Optional[str] = None
     eta_minutes: Optional[int] = Field(None, ge=0)
     agreed_price: Optional[float] = None
+    invoice_description: Optional[str] = None
     
     @validator('status')
     def validate_status(cls, v):
@@ -123,6 +124,7 @@ class RescueRequestResponse(BaseModel):
     actual_arrival_time: Optional[datetime]
     actual_completion_time: Optional[datetime]
     agreed_price: Optional[float]
+    invoice_description: Optional[str]
     payment_status: str
     payment_method: Optional[str]
     feedback: Optional[str]

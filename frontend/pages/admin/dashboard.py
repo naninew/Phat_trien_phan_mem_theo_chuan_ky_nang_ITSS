@@ -210,7 +210,8 @@ def create_admin_dashboard():
                 ui.notify(f"Lỗi tải dữ liệu: {e}", type="negative")
 
         await _load_data()
-        ui.timer(60, _load_data)
+        timer = ui.timer(60, _load_data)
+        ui.context.client.on_disconnect(timer.deactivate)
 
 
 def _stat_card(title, value, icon, color):

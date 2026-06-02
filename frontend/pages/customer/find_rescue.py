@@ -272,7 +272,11 @@ def create_find_rescue_page():
         async def _get_gps(lat_f, lng_f, address_label):
             try:
                 pos = await ui.run_javascript('''
-                    new Promise((resolve, reject) => {
+                    new Promise((resolve) => {
+                        if (!navigator.geolocation) {
+                            resolve({error: "Trình duyệt không hỗ trợ định vị (hoặc cần HTTPS)"});
+                            return;
+                        }
                         navigator.geolocation.getCurrentPosition(
                             position => {
                                 resolve({
@@ -281,19 +285,24 @@ def create_find_rescue_page():
                                 });
                             },
                             error => {
-                                reject(error.message);
+                                resolve({error: error.message || "Lỗi khi lấy vị trí"});
                             },
                             { timeout: 10000, enableHighAccuracy: true }
                         );
                     });
-                ''', timeout=15)
-                if pos:
-                    lat_f.set_value(pos['lat'])
-                    lng_f.set_value(pos['lng'])
-                    address = await get_location_text(lat_f.value, lng_f.value)
-                    # Update address label
-                    address_label.set_text(f'📍 Địa chỉ: {address}')
-                    ui.notify(f"✓ Lấy GPS thành công: {pos['lat']:.4f}, {pos['lng']:.4f}", type='positive')
+                ''', timeout=15.0)
+                
+                if pos and isinstance(pos, dict):
+                    if "error" in pos:
+                        ui.notify(f"✗ Không thể lấy GPS: {pos['error']}", type='negative')
+                    elif "lat" in pos and "lng" in pos:
+                        lat_f.set_value(pos['lat'])
+                        lng_f.set_value(pos['lng'])
+                        address = await get_location_text(lat_f.value, lng_f.value)
+                        address_label.set_text(f'📍 Địa chỉ: {address}')
+                        ui.notify(f"✓ Lấy GPS thành công: {pos['lat']:.4f}, {pos['lng']:.4f}", type='positive')
+                else:
+                    ui.notify("✗ Không thể lấy GPS: Lỗi không xác định", type='negative')
 
             except Exception as e:
                 ui.notify(f"✗ Không thể lấy GPS: {str(e)}", type='negative')

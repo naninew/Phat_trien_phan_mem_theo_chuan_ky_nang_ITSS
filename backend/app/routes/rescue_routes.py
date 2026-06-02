@@ -361,6 +361,7 @@ def get_my_requests(
             "description": r.description,
             "eta_minutes": r.eta_minutes,
             "agreed_price": r.agreed_price,
+            "invoice_description": r.invoice_description,
             "payment_method": r.payment_method,
             "rating": r.rating,
             "feedback": r.feedback,
@@ -453,6 +454,7 @@ def get_request_detail(
             "images": req.images or [],
             "eta_minutes": req.eta_minutes,
             "agreed_price": req.agreed_price,
+            "invoice_description": req.invoice_description,
             "payment_method": req.payment_method,
             "payment_status": req.payment_status,
             "actual_arrival_time": req.actual_arrival_time.isoformat() if req.actual_arrival_time else None,
@@ -646,6 +648,7 @@ def update_request_status(
         status_update.status,
         status_update.eta_minutes,
         status_update.agreed_price,
+        status_update.invoice_description,
     )
     if not req:
         raise HTTPException(status_code=404, detail="Không tìm thấy yêu cầu")
@@ -672,13 +675,13 @@ def complete_request(
         raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
 
     req = rescue_svc.update_request_status(
-        db, request_id, "COMPLETED", agreed_price=update_data.agreed_price
+        db, request_id, "COMPLETED", agreed_price=update_data.agreed_price, invoice_description=update_data.invoice_description
     )
     if not req:
         raise HTTPException(status_code=400, detail="Không thể hoàn thành yêu cầu")
 
     return success_response(
-        data={"id": req.id, "status": req.status, "agreed_price": req.agreed_price},
+        data={"id": req.id, "status": req.status, "agreed_price": req.agreed_price, "invoice_description": req.invoice_description},
         message="Yêu cầu đã hoàn thành",
     )
 
