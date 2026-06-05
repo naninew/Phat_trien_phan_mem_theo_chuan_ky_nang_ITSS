@@ -356,79 +356,60 @@ def get_my_requests(
     from app.models.service import Service
     from app.models.company import RescueCompany
 
-    requests = rescue_svc.get_user_requests(db, current_user["user_id"])
+    user_id = current_user["user_id"]
+    
+    try:
+        requests = rescue_svc.get_user_requests(db, user_id)
+        
+        data = []
 
-    print("========== RAW REQUESTS ==========")
-    print(requests)
+        for r in requests:
+            # Company đã được eager load, không cần query lại
+            company = r.company
 
-    data = []
+            services_data = []
 
-    for r in requests:
+            for rs in r.request_services:
+                if rs.service:
+                    services_data.append({
+                        "id": rs.service.id,
+                        "service_name": rs.service.service_name,
+                        "price": rs.unit_price
+                    })
 
-        print("========== REQUEST ==========")
-        print("ID =", r.id)
-        print("STATUS =", r.status)
+            review = r.review
 
-        company = (
-            db.query(RescueCompany)
-            .filter(RescueCompany.id == r.company_id)
-            .first()
-            if r.company_id else None
+            item = {
+                "id": r.id,
+                "status": r.status,
+                "services": services_data,
+                "company_id": r.company_id,
+                "company_name": company.company_name if company else None,
+                "company_hotline": company.hotline if company else None,
+                "address_description": r.address_description,
+                "incident_type": r.incident_type,
+                "description": r.description,
+                "eta_minutes": r.eta_minutes,
+                "agreed_price": r.agreed_price,
+                "invoice_description": r.invoice_description,
+                "payment_method": r.payment_method,
+                "has_review": review is not None,
+                "rating": review.rating if review else r.rating,
+                "feedback": review.comment if review else r.feedback,
+                "created_at": r.created_at.isoformat(),
+                "updated_at": r.updated_at.isoformat(),
+            }
+
+            data.append(item)
+
+        print(f"[get_my_requests] User {user_id}: {len(data)} requests")
+        return success_response(
+            data=data,
+            message="Success"
         )
-
-        services_data = []
-
-        for rs in r.request_services:
-
-            print("---- REQUEST SERVICE ----")
-            print("RS =", rs)
-
-            if rs.service:
-
-                print("SERVICE ID =", rs.service.id)
-                print("SERVICE NAME =", rs.service.service_name)
-
-                services_data.append({
-                    "id": rs.service.id,
-                    "service_name": rs.service.service_name,
-                    "price": rs.unit_price
-                })
-
-        print("FINAL SERVICES DATA =", services_data)
-
-        review = r.review
-
-        item = {
-            "id": r.id,
-            "status": r.status,
-            "services": services_data,
-            "company_id": r.company_id,
-            "company_name": company.company_name if company else None,
-            "company_hotline": company.hotline if company else None,
-            "address_description": r.address_description,
-            "incident_type": r.incident_type,
-            "description": r.description,
-            "eta_minutes": r.eta_minutes,
-            "agreed_price": r.agreed_price,
-            "invoice_description": r.invoice_description,
-            "payment_method": r.payment_method,
-            "has_review": review is not None,
-            "rating": review.rating if review else r.rating,
-            "feedback": review.comment if review else r.feedback,
-            "created_at": r.created_at.isoformat(),
-            "updated_at": r.updated_at.isoformat(),
-        }
-        print("FINAL ITEM =", item)
-
-        data.append(item)
-
-    print("========== FINAL RESPONSE ==========")
-    print(data)
-
-    return success_response(
-        data=data,
-        message="Success"
-    )
+    except Exception as e:
+        print(f"[get_my_requests] ERROR: {e}")
+        raise
 
 @router.get("/requests/{request_id}")
 def get_request_detail(
@@ -457,12 +438,13 @@ def get_request_detail(
         if not company or req.company_id != company.id:
             raise HTTPException(status_code=403, detail="Không có quyền xem yêu cầu này")
 
-    company = db.query(RescueCompany).filter(RescueCompany.id == req.company_id).first() if req.company_id else None
+    # Company đã được eager load
+    company = req.company
     
     # Xe của customer
     customer_vehicle = db.query(Vehicle).filter(Vehicle.id == req.vehicle_id).first() if req.vehicle_id else None
     
-    review = db.query(Review).filter(Review.rescue_request_id == request_id).first()
+    review = req.review
     
     services_data = []
     for rs in req.request_services:

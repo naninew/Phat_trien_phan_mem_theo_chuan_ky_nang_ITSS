@@ -401,6 +401,9 @@ def create_track_page() -> None:
                                 await render_chat_messages.refresh()
                                 await scroll_chat_to_bottom()
 
+                            elif msg_type == "error":
+                                ui.notify(data.get("message", "Không thể gửi tin nhắn"), type="negative")
+
                 except Exception as e:
                     state["connected"] = False
                     ws_status_dot.classes(remove="text-green-500 text-gray-400")
@@ -448,7 +451,7 @@ def create_track_page() -> None:
 
         # ── SEND MESSAGE ─────────────────────────────────────────────────
 
-        async def do_send() -> None:
+        async def do_send(client_context) -> None:
             if chat_state["sending"]:
                 return
 
@@ -480,7 +483,8 @@ def create_track_page() -> None:
                 if not result:
                     _remove_temp_message(temp_id)
                     await render_chat_messages.refresh()
-                    ui.notify("Gửi tin nhắn thất bại", type="negative")
+                    with client_context:
+                        ui.notify("Gửi tin nhắn thất bại", type="negative")
                     return
 
                 _append_message(
@@ -494,13 +498,19 @@ def create_track_page() -> None:
             except Exception as e:
                 _remove_temp_message(temp_id)
                 await render_chat_messages.refresh()
-                ui.notify(f"Lỗi: {str(e)}", type="negative")
+                with client_context:
+                    ui.notify(f"Lỗi: {str(e)}", type="negative")
             finally:
                 chat_state["sending"] = False
                 send_btn.enable()
 
-        send_btn.on_click(lambda: asyncio.ensure_future(do_send()))
-        chat_input.on("keydown.enter", lambda: asyncio.ensure_future(do_send()))
+        def _send_handler():
+            from nicegui import context
+            client_context = context.client
+            asyncio.ensure_future(do_send(client_context))
+
+        send_btn.on_click(_send_handler)
+        chat_input.on("keydown.enter", _send_handler)
 
         # ────────────────────────────────────────────────────────────────
         # MAP UPDATE

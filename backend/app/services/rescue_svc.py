@@ -279,12 +279,30 @@ def create_rescue_request(
 
 
 def get_request_by_id(db: Session, request_id: int) -> Optional[RescueRequest]:
-    return db.query(RescueRequest).filter(RescueRequest.id == request_id).first()
+    from sqlalchemy.orm import joinedload
+    return (
+        db.query(RescueRequest)
+        .options(
+            joinedload(RescueRequest.company),
+            joinedload(RescueRequest.user),
+            joinedload(RescueRequest.request_services),
+            joinedload(RescueRequest.review),
+        )
+        .filter(RescueRequest.id == request_id)
+        .first()
+    )
 
 
 def get_user_requests(db: Session, user_id: int) -> List[RescueRequest]:
+    from sqlalchemy.orm import joinedload
     return (
         db.query(RescueRequest)
+        .options(
+            joinedload(RescueRequest.company),
+            joinedload(RescueRequest.user),
+            joinedload(RescueRequest.request_services),
+            joinedload(RescueRequest.review),
+        )
         .filter(RescueRequest.user_id == user_id)
         .order_by(RescueRequest.created_at.desc())
         .all()
@@ -296,10 +314,22 @@ def get_company_queue(
     company_id: int,
     status_filter: Optional[str] = None,
 ) -> List[RescueRequest]:
-    """Lấy danh sách requests của một công ty (queue)."""
-    q = db.query(RescueRequest).filter(RescueRequest.company_id == company_id)
+    """Lấy danh sách requests của một công ty (queue) với eager loading."""
+    from sqlalchemy.orm import joinedload
+    
+    q = (
+        db.query(RescueRequest)
+        .options(
+            joinedload(RescueRequest.company),
+            joinedload(RescueRequest.user),
+            joinedload(RescueRequest.request_services),
+        )
+        .filter(RescueRequest.company_id == company_id)
+    )
     if status_filter and status_filter != "all":
         q = q.filter(RescueRequest.status == status_filter)
+    
+    # Expire objects to get fresh data từ database
     return q.order_by(RescueRequest.created_at.desc()).all()
 
 

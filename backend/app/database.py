@@ -32,7 +32,12 @@ engine = create_engine(
 )
 
 # ─── Session factory ─────────────────────────────────────────────────────────
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(
+    autocommit=False, 
+    autoflush=False, 
+    bind=engine,
+    expire_on_commit=True,  # Force refresh on next access after commit
+)
 
 # ─── Declarative base ────────────────────────────────────────────────────────
 Base = declarative_base()

@@ -4,13 +4,36 @@ from typing import List, Optional
 from datetime import datetime
 
 from app.models.communication import Message, Notification
+from app.models.company import RescueCompany
+from app.models.request import RescueRequest
 from app.schemas.chat import MessageCreate
 
+
+def _resolve_receiver_id(db: Session, sender_id: int, msg_data: MessageCreate) -> int:
+    if msg_data.receiver_id and msg_data.receiver_id > 0:
+        return msg_data.receiver_id
+
+    req = db.query(RescueRequest).filter(RescueRequest.id == msg_data.request_id).first()
+    if not req:
+        raise ValueError("Không tìm thấy yêu cầu cứu hộ")
+
+    if sender_id == req.user_id:
+        if not req.company_id:
+            raise ValueError("Yêu cầu chưa có đơn vị cứu hộ để nhắn tin")
+        company = db.query(RescueCompany).filter(RescueCompany.id == req.company_id).first()
+        if not company:
+            raise ValueError("Không tìm thấy đơn vị cứu hộ")
+        return company.owner_id
+
+    return req.user_id
+
+
 def send_message(db: Session, sender_id: int, msg_data: MessageCreate) -> Message:
+    receiver_id = _resolve_receiver_id(db, sender_id, msg_data)
     new_msg = Message(
         request_id=msg_data.request_id,
         sender_id=sender_id,
-        receiver_id=msg_data.receiver_id,
+        receiver_id=receiver_id,
         sender_type=msg_data.sender_type,
         content=msg_data.content,
         sent_time=datetime.utcnow()
@@ -21,7 +44,14 @@ def send_message(db: Session, sender_id: int, msg_data: MessageCreate) -> Messag
     return new_msg
 
 def get_messages_by_request(db: Session, request_id: int) -> List[Message]:
-    return db.query(Message).filter(Message.request_id == request_id).order_by(Message.sent_time.asc()).all()
+    from sqlalchemy.orm import joinedload
+    return (
+        db.query(Message)
+        .options(joinedload(Message.sender))
+        .filter(Message.request_id == request_id)
+        .order_by(Message.sent_time.asc())
+        .all()
+    )
 
 def create_notification(db: Session, receiver_id: int, title: str, content: str, request_id: Optional[int] = None) -> Notification:
     from app.services import notification_svc

@@ -60,7 +60,10 @@ async def send_message(
         if not company or req.company_id != company.id:
             raise HTTPException(status_code=403, detail="Không có quyền gửi tin nhắn")
 
-    msg = chat_svc.send_message(db, user_id, msg_data)
+    try:
+        msg = chat_svc.send_message(db, user_id, msg_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     await _broadcast_ws_message(msg_data.request_id, msg)
     return success_response(data=MessageResponse.from_orm(msg), message="Đã gửi tin nhắn")
 
@@ -152,7 +155,10 @@ async def send_chat_by_request(
         sender_type=sender_type,
         content=message
     )
-    msg = chat_svc.send_message(db, user_id, msg_data)
+    try:
+        msg = chat_svc.send_message(db, user_id, msg_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     await _broadcast_ws_message(request_id, msg)
     return success_response(data=MessageResponse.from_orm(msg).dict(), message="Đã gửi tin nhắn")
 

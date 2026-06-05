@@ -110,6 +110,10 @@ def create_queue_page():
         async def _open_chat_dialog(req_id: int, customer_name: str):
             """Mở dialog chat với customer của request req_id."""
 
+            # Capture UI context ngay lập tức
+            from nicegui import context
+            ui_context = context.client
+
             # Nếu đã có dialog cho request này, không mở thêm
             chat_messages: List[Dict] = []
 
@@ -240,11 +244,13 @@ def create_queue_page():
                     if not result:
                         chat_messages.pop()
                         await _render_msgs.refresh()
-                        ui.notify("Gửi thất bại", type="negative")
+                        with ui_context:
+                            ui.notify("Gửi thất bại", type="negative")
                 except Exception as e:
                     chat_messages.pop()
                     await _render_msgs.refresh()
-                    ui.notify(f"Lỗi: {e}", type="negative")
+                    with ui_context:
+                        ui.notify(f"Lỗi: {e}", type="negative")
 
             chat_send_btn.on_click(lambda: asyncio.ensure_future(_do_send()))
             chat_inp.on("keydown.enter", lambda: asyncio.ensure_future(_do_send()))
@@ -265,7 +271,8 @@ def create_queue_page():
                             close_timeout=5,
                         ) as ws:
                             retry = 0
-                            ws_status_lbl.set_text("Real-time ✓")
+                            with ui_context:
+                                ws_status_lbl.set_text("Real-time ✓")
 
                             async for raw in ws:
                                 try:
@@ -286,9 +293,10 @@ def create_queue_page():
                                             stamp=m.get("created_at", ""),
                                             msg_id=m.get("id"),
                                         )
-                                    with msg_scroll:
-                                        await _render_msgs()
-                                    await _scroll_bottom()
+                                    with ui_context:
+                                        with msg_scroll:
+                                            await _render_msgs()
+                                        await _scroll_bottom()
                                 elif t == "message":
                                     _append_message(
                                         message=data["message"],
@@ -297,16 +305,22 @@ def create_queue_page():
                                         stamp=data.get("created_at", ""),
                                         msg_id=data.get("id"),
                                     )
-                                    await _render_msgs.refresh()
-                                    await _scroll_bottom()
+                                    with ui_context:
+                                        await _render_msgs.refresh()
+                                        await _scroll_bottom()
+                                elif t == "error":
+                                    with ui_context:
+                                        ui.notify(data.get("message", "Không thể gửi tin nhắn"), type="negative")
 
                     except asyncio.CancelledError:
                         return
                     except Exception as e:
                         retry += 1
-                        ws_status_lbl.set_text(f"Mất kết nối ({retry}/{max_retry})...")
+                        with ui_context:
+                            ws_status_lbl.set_text(f"Mất kết nối ({retry}/{max_retry})...")
                         if retry > max_retry:
-                            ws_status_lbl.set_text("Không kết nối được")
+                            with ui_context:
+                                ws_status_lbl.set_text("Không kết nối được")
                             break
                         await asyncio.sleep(min(2 ** retry, 30))
 
@@ -316,7 +330,8 @@ def create_queue_page():
                 ws_task = asyncio.ensure_future(_ws_listener())
                 active_chat_tasks[req_id] = ws_task
             else:
-                ws_status_lbl.set_text("Polling mode")
+                with ui_context:
+                    ws_status_lbl.set_text("Polling mode")
                 # Fallback: load history 1 lần
                 from services.rescue_api import get_chat_messages
                 try:
@@ -330,18 +345,20 @@ def create_queue_page():
                             stamp=m.get("created_at", ""),
                             msg_id=m.get("id"),
                         )
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[fallback] {e}")
 
             # Render lần đầu (WS sẽ override qua history event)
-            with msg_scroll:
-                await _render_msgs()
+            with ui_context:
+                with msg_scroll:
+                    await _render_msgs()
 
             # Cleanup khi dialog đóng
             def _on_close():
                 if ws_task and not ws_task.done():
                     ws_task.cancel()
                 active_chat_tasks.pop(req_id, None)
+                print(f"[chat] Dialog #{req_id} closed, cleanup done")
 
             chat_dlg.on("hide", lambda: _on_close())
             chat_dlg.open()

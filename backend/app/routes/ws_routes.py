@@ -316,7 +316,14 @@ async def websocket_chat(
                 sender_type=sender_type,
                 content=content,
             )
-            saved = chat_svc.send_message(db, user_id, msg_data)
+            try:
+                saved = chat_svc.send_message(db, user_id, msg_data)
+            except ValueError as exc:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": str(exc),
+                }, ensure_ascii=False))
+                continue
 
             from datetime import timedelta
             local_time = saved.sent_time + timedelta(hours=7)

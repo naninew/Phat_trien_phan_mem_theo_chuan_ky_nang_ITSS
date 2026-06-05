@@ -187,6 +187,17 @@ def create_requests_page():
         def status_group_count(*statuses: str) -> int:
             return sum(1 for r in state["all_requests"] if r.get("status") in statuses)
 
+        def _deduplicate_requests(requests: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            """Loại bỏ requests trùng lặp (theo ID)"""
+            seen_ids = set()
+            deduped = []
+            for r in requests:
+                req_id = r.get("id")
+                if req_id not in seen_ids:
+                    seen_ids.add(req_id)
+                    deduped.append(r)
+            return deduped
+
         def update_service_options():
             names = sorted({service_name(r) for r in state["all_requests"] if service_name(r)})
             service_filter.options = {"all": "Tất cả dịch vụ", **{name: name for name in names}}
@@ -339,11 +350,20 @@ def create_requests_page():
         async def _load_data():
             refresh_btn.props("loading")
             try:
-                state["all_requests"] = await get_my_requests()
+                # Lấy dữ liệu từ server
+                new_requests = await get_my_requests()
+                
+                # Cập nhật state - replace toàn bộ với dữ liệu đã dedup
+                state["all_requests"] = _deduplicate_requests(new_requests if new_requests else [])
+                
+                # Update filter options (services)
                 update_service_options()
+                
+                # Re-render UI từ đầu
                 _render()
             except Exception as e:
                 ui.notify(f"Lỗi tải dữ liệu: {e}", type="negative")
+                print(f"[ERROR] _load_data: {e}")
             finally:
                 refresh_btn.props(remove="loading")
 
@@ -495,5 +515,24 @@ def create_requests_page():
             dialog.open()
 
         await _load_data()
-        timer = ui.timer(30, _load_data)
-        ui.context.client.on_disconnect(timer.deactivate)
+        
+        # Lưu trữ timer để tránh race conditions
+        _timer_ref = {"timer": None, "loading": False}
+        
+        async def _safe_load_data():
+            """Load dữ liệu với guard chống race condition"""
+            if _timer_ref["loading"]:
+                return
+            _timer_ref["loading"] = True
+            try:
+                await _load_data()
+            finally:
+                _timer_ref["loading"] = False
+        
+        _timer_ref["timer"] = ui.timer(30, _safe_load_data)
+        
+        def _cleanup():
+            if _timer_ref["timer"]:
+                _timer_ref["timer"].deactivate()
+        
+        ui.context.client.on_disconnect(_cleanup)
