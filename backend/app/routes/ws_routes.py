@@ -1,6 +1,7 @@
 """
 WebSocket routes for real-time chat between customer and company.
 """
+import asyncio
 import json
 import logging
 from typing import Dict, List
@@ -99,6 +100,52 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+class NotificationConnectionManager:
+    """Quản lý WebSocket thông báo theo user_id."""
+
+    def __init__(self):
+        self.connections: Dict[int, List[WebSocket]] = {}
+        self.loop = None
+
+    async def connect(self, user_id: int, websocket: WebSocket):
+        self.loop = asyncio.get_running_loop()
+        await websocket.accept()
+        self.connections.setdefault(user_id, []).append(websocket)
+        logger.info(f"[WS-NOTIF] User {user_id} connected. Total: {len(self.connections[user_id])}")
+
+    def disconnect(self, user_id: int, websocket: WebSocket):
+        if user_id in self.connections:
+            self.connections[user_id] = [
+                ws for ws in self.connections[user_id] if ws is not websocket
+            ]
+            if not self.connections[user_id]:
+                del self.connections[user_id]
+        logger.info(f"[WS-NOTIF] User {user_id} disconnected")
+
+    async def send_to_user(self, user_id: int, payload: dict):
+        if user_id not in self.connections:
+            return
+        dead = []
+        for ws in self.connections[user_id]:
+            try:
+                await ws.send_text(json.dumps(payload, ensure_ascii=False))
+            except Exception as e:
+                logger.warning(f"[WS-NOTIF] Failed to send to user {user_id}: {e}")
+                dead.append(ws)
+        if dead:
+            self.connections[user_id] = [
+                ws for ws in self.connections[user_id] if ws not in dead
+            ]
+
+    def send_to_user_nowait(self, user_id: int, payload: dict):
+        if not self.loop or user_id not in self.connections:
+            return
+        asyncio.run_coroutine_threadsafe(self.send_to_user(user_id, payload), self.loop)
+
+
+notification_manager = NotificationConnectionManager()
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Helper
 # ──────────────────────────────────────────────────────────────────────────────
@@ -114,6 +161,43 @@ def _get_sender_display_name(msg) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 # WebSocket Endpoint
 # ──────────────────────────────────────────────────────────────────────────────
+
+@router.websocket("/notifications")
+async def websocket_notifications(
+    websocket: WebSocket,
+    token: str = Query(..., description="JWT access token"),
+):
+    """
+    WebSocket real-time notification endpoint.
+    URL: ws://host/api/v1/ws/notifications?token=<JWT>
+    """
+    payload = decode_token(token)
+    if not payload:
+        await websocket.close(code=4001, reason="Unauthorized: invalid token")
+        return
+
+    user_id: int = payload.get("user_id")
+    if not user_id:
+        await websocket.close(code=4001, reason="Unauthorized: missing user_id")
+        return
+
+    await notification_manager.connect(user_id, websocket)
+    try:
+        await websocket.send_text(json.dumps({"type": "connected"}, ensure_ascii=False))
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if data.get("type") == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.error(f"[WS-NOTIF] Error for user {user_id}: {e}", exc_info=True)
+    finally:
+        notification_manager.disconnect(user_id, websocket)
 
 @router.websocket("/chat/{request_id}")
 async def websocket_chat(

@@ -5,7 +5,7 @@ from nicegui import ui
 from contextlib import contextmanager
 from components.navbar import create_navbar
 from components.sidebar import create_sidebar
-from core.auth import is_authenticated
+from core.auth import get_user_role, is_authenticated
 
 @contextmanager
 def page_layout(current_route: str = "", title: str = "Rescue24"):
@@ -26,7 +26,7 @@ def page_layout(current_route: str = "", title: str = "Rescue24"):
         
         with ui.column().classes("w-full min-h-screen bg-surface pt-10"):
             # Page Title Area
-            if title:
+            if title and get_user_role() != "customer":
                 with ui.row().classes("items-center justify-between w-full mb-4"):
                     ui.label(title).classes("text-3xl font-bold text-on-surface font-outfit tracking-tight")
             

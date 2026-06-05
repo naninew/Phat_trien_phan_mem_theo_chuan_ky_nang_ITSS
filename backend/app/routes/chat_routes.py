@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.database import get_db
+from app.models.communication import Notification
+from app.models.request import RescueRequest
 from app.schemas.chat import MessageCreate, MessageResponse, NotificationResponse
 from app.services import auth_svc, chat_svc, rescue_svc
 from app.utils.response import success_response
@@ -86,7 +88,7 @@ def get_messages(
     messages = chat_svc.get_messages_by_request(db, request_id)
     return success_response(data=[MessageResponse.from_orm(m) for m in messages])
 
-@router.get("/{request_id}", response_model=dict)
+@router.get("/{request_id:int}", response_model=dict)
 def get_chat_by_request(
     request_id: int,
     db: Session = Depends(get_db),
@@ -119,7 +121,7 @@ def get_chat_by_request(
         result.append(msg_dict)
     return success_response(data=result)
 
-@router.post("/{request_id}", response_model=dict)
+@router.post("/{request_id:int}", response_model=dict)
 async def send_chat_by_request(
     request_id: int,
     message: str = Query(...),
@@ -158,6 +160,54 @@ async def send_chat_by_request(
 # Notifications
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _ensure_notification(
+    db: Session,
+    receiver_id: int,
+    request_id: int,
+    title: str,
+    content: str,
+):
+    exists = db.query(Notification).filter(
+        Notification.receiver_id == receiver_id,
+        Notification.request_id == request_id,
+        Notification.title == title,
+    ).first()
+    if not exists:
+        chat_svc.create_notification(db, receiver_id, title, content, request_id)
+
+
+def _backfill_missing_notifications(db: Session, current_user: dict):
+    user_id = current_user["user_id"]
+    role = current_user.get("role")
+
+    if role == "company_staff":
+        company = rescue_svc.get_company_by_owner_id(db, user_id)
+        if not company:
+            return
+        requests = rescue_svc.get_company_queue(db, company.id)
+        for req in requests:
+            _ensure_notification(
+                db,
+                user_id,
+                req.id,
+                "Yêu cầu cứu hộ mới",
+                f"Khách hàng vừa gửi yêu cầu #{req.id} tại {req.address_description}.",
+            )
+        return
+
+    if role == "customer":
+        requests = rescue_svc.get_user_requests(db, user_id)
+        for req in requests:
+            if req.status == "PENDING":
+                continue
+            _ensure_notification(
+                db,
+                user_id,
+                req.id,
+                "Cập nhật trạng thái cứu hộ",
+                f"Yêu cầu #{req.id} đã chuyển sang trạng thái {req.status}.",
+            )
+
 @router.get("/notifications", response_model=dict)
 def get_notifications(
     unread_only: bool = False,
@@ -165,6 +215,7 @@ def get_notifications(
     current_user: dict = Depends(auth_svc.get_current_user_from_token),
 ):
     """Lấy danh sách thông báo của người dùng hiện tại."""
+    _backfill_missing_notifications(db, current_user)
     notifications = chat_svc.get_notifications_by_user(db, current_user["user_id"], unread_only)
     return success_response(data=[NotificationResponse.from_orm(n) for n in notifications])
 
@@ -180,3 +231,11 @@ def mark_notification_as_read(
         raise HTTPException(status_code=404, detail="Không tìm thấy thông báo")
     return success_response(data={}, message="Đã đánh dấu đã đọc")
 
+@router.put("/notifications/read-all", response_model=dict)
+def mark_all_notifications_as_read(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    """Đánh dấu tất cả thông báo của người dùng hiện tại là đã đọc."""
+    updated = chat_svc.mark_all_notifications_as_read(db, current_user["user_id"])
+    return success_response(data={"updated": updated}, message="Đã đọc tất cả thông báo")

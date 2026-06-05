@@ -41,6 +41,7 @@ def create_queue_page():
             return
 
         token = get_access_token()
+        dialog_open = False
 
         # ── Chat State (per open dialog) ─────────────────────────────────────
         # Stores active WS tasks so we can cancel when dialog closes
@@ -81,7 +82,10 @@ def create_queue_page():
 
         # ── Logic ─────────────────────────────────────────────────────────────
 
-        async def _load_data():
+        async def _load_data(auto_refresh: bool = False):
+            if auto_refresh and dialog_open:
+                return
+
             refresh_btn.props("loading")
             queue_container.clear()
             try:
@@ -474,7 +478,15 @@ def create_queue_page():
                 ui.notify(f"Lỗi: {e}", type="negative")
 
         async def _show_assign_dialog(req, vehicles, staff):
-            with ui.dialog() as d, ui.card().classes("p-8 rounded-3xl w-[450px]"):
+            nonlocal dialog_open
+            dialog_open = True
+
+            def close_dialog():
+                nonlocal dialog_open
+                dialog_open = False
+                d.close()
+
+            with ui.dialog().props("persistent") as d, ui.card().classes("p-8 rounded-3xl w-[450px]"):
                 ui.label("Phân công cứu hộ").classes(
                     "text-2xl font-bold mb-6 font-outfit text-primary"
                 )
@@ -495,7 +507,7 @@ def create_queue_page():
                 ).props("outlined rounded")
 
                 with ui.row().classes("w-full justify-end gap-3"):
-                    ui.button("HỦY", on_click=d.close).props("flat")
+                    ui.button("HỦY", on_click=close_dialog).props("flat")
 
                     async def assign():
                         if not v_sel.value or not s_sel.value:
@@ -504,7 +516,7 @@ def create_queue_page():
                         try:
                             await assign_request(req['id'], s_sel.value, v_sel.value)
                             ui.notify("Đã phân công thành công!", type="positive")
-                            d.close()
+                            close_dialog()
                             await _load_data()
                         except Exception as e:
                             ui.notify(f"Lỗi: {e}", type="negative")
@@ -515,7 +527,15 @@ def create_queue_page():
             d.open()
 
         async def _show_complete_dialog(req):
-            with ui.dialog() as d, ui.card().classes("p-8 rounded-3xl w-[400px]"):
+            nonlocal dialog_open
+            dialog_open = True
+
+            def close_dialog():
+                nonlocal dialog_open
+                dialog_open = False
+                d.close()
+
+            with ui.dialog().props("persistent") as d, ui.card().classes("p-8 rounded-3xl w-[400px]"):
                 ui.label("Hoàn thành cứu hộ").classes(
                     "text-2xl font-bold mb-6 font-outfit text-primary"
                 )
@@ -528,7 +548,7 @@ def create_queue_page():
                 ).classes("w-full mb-8").props("outlined rounded rows=3")
 
                 with ui.row().classes("w-full justify-end gap-3"):
-                    ui.button("HỦY", on_click=d.close).props("flat")
+                    ui.button("HỦY", on_click=close_dialog).props("flat")
 
                     async def complete():
                         if price.value is None or price.value == "":
@@ -543,7 +563,7 @@ def create_queue_page():
                                 req['id'], 'COMPLETED', agreed_price=price.value, invoice_description=desc.value.strip()
                             )
                             ui.notify("Đã hoàn thành yêu cầu cứu hộ", type="positive")
-                            d.close()
+                            close_dialog()
                             await _load_data()
                         except Exception as e:
                             ui.notify(f"Lỗi: {e}", type="negative")
@@ -570,5 +590,5 @@ def create_queue_page():
                 ui.notify(f"Lỗi: {e}", type="negative")
 
         await _load_data()
-        timer = ui.timer(15, _load_data)
+        timer = ui.timer(15, lambda: _load_data(auto_refresh=True))
         ui.context.client.on_disconnect(timer.deactivate)

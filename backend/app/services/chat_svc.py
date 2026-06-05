@@ -51,3 +51,12 @@ def mark_notification_as_read(db: Session, notification_id: int, user_id: int) -
         db.commit()
         return True
     return False
+
+def mark_all_notifications_as_read(db: Session, user_id: int) -> int:
+    updated = (
+        db.query(Notification)
+        .filter(Notification.receiver_id == user_id, Notification.is_read == False)
+        .update({"is_read": True}, synchronize_session=False)
+    )
+    db.commit()
+    return updated

@@ -155,7 +155,7 @@ async def update_request_status(
     payload: Dict[str, Any] = {"status": new_status}
     if vehicle_id:
         payload["vehicle_id"] = vehicle_id
-    if eta_minutes:
+    if eta_minutes is not None:
         payload["eta_minutes"] = eta_minutes
     if agreed_price is not None:
         payload["agreed_price"] = agreed_price

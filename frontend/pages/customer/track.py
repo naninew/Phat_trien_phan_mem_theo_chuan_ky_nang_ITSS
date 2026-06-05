@@ -643,6 +643,23 @@ def create_track_page() -> None:
                             else:
                                 ui.label("Đang chờ cập nhật chi phí...").classes("italic opacity-70")
 
+                    if req.get("has_review"):
+                        ui.button(
+                            "XEM ĐÁNH GIÁ",
+                            icon="rate_review",
+                            on_click=lambda: ui.navigate.to(f"/customer/review/{request_id}"),
+                        ).classes(
+                            "w-full rounded-2xl font-bold py-4 bg-emerald-600 text-white"
+                        ).props("unelevated")
+                    else:
+                        ui.button(
+                            "ĐÁNH GIÁ DỊCH VỤ",
+                            icon="star",
+                            on_click=lambda: ui.navigate.to(f"/customer/review/{request_id}"),
+                        ).classes(
+                            "w-full rounded-2xl font-bold py-4 bg-amber-500 text-white"
+                        ).props("unelevated")
+
         async def confirm_cancel() -> None:
             with ui.dialog() as dlg, ui.card().classes("p-8 rounded-[28px] w-[420px]"):
                 ui.label("Xác nhận hủy yêu cầu?").classes("text-2xl font-bold mb-2")

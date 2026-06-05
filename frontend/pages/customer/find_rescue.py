@@ -60,7 +60,9 @@ def create_find_rescue_page():
 
         with page_layout("/customer/find-rescue", title="Yêu Cầu Cứu Hộ"):
             
-            with ui.stepper().classes('w-full shadow-none bg-transparent') as stepper:
+            with ui.stepper().classes(
+                'w-full rounded-3xl bg-white/70 p-4 shadow-sm border border-gray-100'
+            ).props('flat animated') as stepper:
                 # ── STEP 1: CHỌN XE ───────────────────────────────────────────
                 with ui.step('Chọn Xe'):
                     with ui.column().classes('w-full gap-6'):
@@ -114,126 +116,202 @@ def create_find_rescue_page():
 
                 # ── STEP 2: VỊ TRÍ & DỊCH VỤ ──────────────────────────────────
                 with ui.step('Vị trí & Sự cố'):
-                    with ui.column().classes('w-full gap-6'):
-                        
-                        # Header
-                        ui.label('Thông tin vị trí và sự cố').classes('text-2xl font-bold text-primary')
-                        ui.label('Cung cấp chi tiết về vị trí và tình trạng sự cố').classes('text-sm text-gray-600 mb-2')
-                        
-                        # ── FORM SECTION ──────────────────────────────────
-                        with ui.card().classes('w-full p-6 rounded-2xl border-2 border-gray-200'):
-                            # Service Select
-                            services = await get_services()
-                            service_mapping = {s['id']: s['service_name'] for s in services}
-                            svc_select = ui.select(
-                                options=service_mapping, 
-                                label='Loại sự cố *'
-                            ).classes('w-full').props('outlined rounded dense')
-                            
-                            # Issue description
-                            issue_input = ui.textarea(
-                                'Mô tả tình trạng *',
-                                placeholder='Vd: Xe bị chết máy, mất xích...'
-                            ).classes('w-full min-h-[100px]').props('outlined')
-                            
-                            # Location inputs
-                            ui.label('Vị trí hiện tại').classes('text-sm font-bold text-primary mt-4 mb-2')
-                            with ui.row().classes('w-full gap-3'):
-                                lat_input = ui.number('Vĩ độ', value=state['lat'], format='%.6f').classes('flex-1').props('outlined dense')
-                                lng_input = ui.number('Kinh độ', value=state['lng'], format='%.6f').classes('flex-1').props('outlined dense')
-                            
-                            # GPS Button
-                            ui.button(
-                                'Lấy vị trí GPS tự động',
-                                icon='my_location',
-                                on_click=lambda: _get_gps(lat_input, lng_input, address_label)
-                            ).classes('w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-all')
-                            
-                            # Address Display
-                            address_label = ui.label('📍 Địa chỉ: Chưa lấy GPS').classes(
-                                'w-full p-4 bg-blue-50 text-blue-900 rounded-lg text-sm border-l-4 border-blue-600 font-medium'
-                            )
+                    services = await get_services()
+                    service_mapping = {s['id']: s['service_name'] for s in services}
 
-                        # ── MAP SECTION ──────────────────────────────────
-                        with ui.card().classes('w-full p-0 overflow-hidden rounded-2xl border-2 border-gray-200'):
-                            ui.label('Bản đồ vị trí').classes('px-6 pt-6 pb-2 text-sm font-bold text-gray-700')
-                            with ui.card().classes('w-full h-[300px] p-0 overflow-hidden rounded-xl m-4 mt-0 border-0 shadow-none'):
-                                m = ui.leaflet(center=(state['lat'], state['lng']), zoom=13).classes('w-full h-full')
-                                m.tile_layer(url_template='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
-                                marker = m.marker(latlng=(state['lat'], state['lng']))
-                                
-                                # Style marker with HTML popup and better display
-                                async def init_marker():
-                                    await ui.run_javascript(f"""
-                                    setTimeout(function() {{
-                                        var el = getElement({m.id});
-                                        if (!el) return;
-                                        var map = el._leaflet_map ?? el.leaflet ?? el._map;
-                                        if (!map) return;
-                                        
-                                        // Get all markers and style the latest one (our user marker)
-                                        map.eachLayer(function(layer) {{
-                                            if (layer instanceof L.Marker) {{
-                                                var blueIcon = L.icon({{
-                                                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-                                                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-                                                    iconSize: [25, 41],
-                                                    iconAnchor: [12, 41],
-                                                    popupAnchor: [1, -34],
-                                                    shadowSize: [41, 41]
-                                                }});
-                                                layer.setIcon(blueIcon);
-                                                layer.bindPopup('<div style="font-weight: bold; text-align: center; color: #2563eb;">📍 Vị trí của bạn</div>');
-                                            }}
-                                        }});
-                                    }}, 100);
-                                    """, timeout=5.0)
-                                
-                                ui.timer(0.5, init_marker, once=True)
+                    with ui.column().classes('w-full gap-5'):
+                        with ui.row().classes('w-full items-start justify-between gap-4'):
+                            with ui.column().classes('gap-1'):
+                                ui.label('Thông tin vị trí và sự cố').classes(
+                                    'text-3xl font-bold text-slate-900 font-outfit'
+                                )
+                                ui.label(
+                                    'Cho Rescue24 biết bạn đang ở đâu và xe đang gặp vấn đề gì.'
+                                ).classes('text-sm text-slate-500')
 
-                    def _update_map():
-                        marker.set_latlng((lat_input.value, lng_input.value))
-                        m.set_center((lat_input.value, lng_input.value))
-                        
-                        # Style marker with blue icon after update
-                        async def update_marker_style():
-                            await ui.run_javascript(f"""
-                            setTimeout(function() {{
-                                var el = getElement({m.id});
-                                if (!el) return;
-                                var map = el._leaflet_map ?? el.leaflet ?? el._map;
-                                if (!map) return;
-                                
-                                map.eachLayer(function(layer) {{
-                                    if (layer instanceof L.Marker) {{
-                                        var blueIcon = L.icon({{
-                                            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-                                            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-                                            iconSize: [25, 41],
-                                            iconAnchor: [12, 41],
-                                            popupAnchor: [1, -34],
-                                            shadowSize: [41, 41]
-                                        }});
-                                        layer.setIcon(blueIcon);
-                                        layer.bindPopup('<div style="font-weight: bold; text-align: center; color: #2563eb;">📍 Vị trí của bạn</div>');
-                                    }}
-                                }});
-                            }}, 50);
-                            """, timeout=5.0)
-                        
-                        asyncio.ensure_future(update_marker_style())
+                        with ui.row().classes('w-full gap-5 items-start flex-col lg:flex-row'):
+                            with ui.column().classes('w-full lg:flex-1 gap-5'):
+                                with ui.card().classes(
+                                    'w-full rounded-3xl border border-slate-100 bg-white p-6 shadow-sm'
+                                ):
+                                    with ui.row().classes('items-center gap-3 mb-5'):
+                                        with ui.element('div').classes(
+                                            'h-11 w-11 rounded-2xl bg-blue-50 flex items-center justify-center'
+                                        ):
+                                            ui.icon('medical_services', size='1.5rem').classes('text-blue-600')
+                                        with ui.column().classes('gap-0'):
+                                            ui.label('Chi tiết sự cố').classes(
+                                                'text-xl font-bold text-slate-900 font-outfit'
+                                            )
+                                            ui.label('Chọn loại dịch vụ và mô tả ngắn gọn tình trạng xe.').classes(
+                                                'text-sm text-slate-500'
+                                            )
 
-                    lat_input.on('update:model-value', _update_map)
-                    lng_input.on('update:model-value', _update_map)
+                                    svc_select = ui.select(
+                                        options=service_mapping,
+                                        label='Loại sự cố *',
+                                    ).classes('w-full').props('outlined rounded stack-label')
+
+                                    issue_input = ui.textarea(
+                                        label='Mô tả tình trạng *',
+                                        placeholder='Ví dụ: Xe chết máy giữa đường, cần kiểm tra ắc quy và kéo về gara gần nhất.',
+                                    ).classes('w-full mt-4').props('outlined rounded rows=3 stack-label')
+
+                                with ui.card().classes(
+                                    'w-full rounded-3xl border border-slate-100 bg-white p-6 shadow-sm'
+                                ):
+                                    with ui.row().classes('w-full items-center justify-between gap-3 mb-4'):
+                                        with ui.row().classes('items-center gap-3'):
+                                            with ui.element('div').classes(
+                                                'h-11 w-11 rounded-2xl bg-emerald-50 flex items-center justify-center'
+                                            ):
+                                                ui.icon('my_location', size='1.5rem').classes('text-emerald-600')
+                                            with ui.column().classes('gap-0'):
+                                                ui.label('Vị trí cứu hộ').classes(
+                                                    'text-xl font-bold text-slate-900 font-outfit'
+                                                )
+                                                ui.label('Dùng GPS để xác định địa chỉ hiện tại của bạn.').classes(
+                                                    'text-sm text-slate-500'
+                                                )
+
+                                        gps_button = ui.button(
+                                            'Lấy GPS',
+                                            icon='gps_fixed',
+                                            on_click=lambda: _get_gps(
+                                                address_label,
+                                                gps_status_label,
+                                                gps_status_icon,
+                                                gps_button,
+                                                m.id,
+                                                summary_address,
+                                            ),
+                                        ).classes(
+                                            'rounded-xl bg-blue-600 px-4 py-2 font-bold text-white shadow-sm '
+                                            'hover:bg-blue-700'
+                                        ).props('unelevated')
+
+                                    with ui.element('div').classes(
+                                        'w-full rounded-2xl border border-slate-100 bg-slate-50 p-4'
+                                    ):
+                                        with ui.row().classes('items-start gap-3'):
+                                            gps_status_icon = ui.icon('radio_button_unchecked', size='1.25rem').classes(
+                                                'text-slate-400 mt-0.5'
+                                            )
+                                            with ui.column().classes('flex-1 gap-1'):
+                                                gps_status_label = ui.label('Chưa lấy vị trí GPS').classes(
+                                                    'text-sm font-bold text-slate-700'
+                                                )
+                                                address_label = ui.label(
+                                                    'Nhấn “Lấy GPS” để tự động xác định địa chỉ cứu hộ.'
+                                                ).classes('text-sm text-slate-500 leading-relaxed')
+
+                                    with ui.element('div').classes(
+                                        'w-full h-[220px] mt-4 overflow-hidden rounded-2xl border border-slate-100'
+                                    ):
+                                        m = ui.leaflet(center=(state['lat'], state['lng']), zoom=13).classes(
+                                            'w-full h-full'
+                                        )
+                                        m.tile_layer(
+                                            url_template='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                                        )
+
+                                    ui.timer(
+                                        0.5,
+                                        lambda: asyncio.ensure_future(_invalidate_map_size(m.id)),
+                                        once=True,
+                                    )
+
+                            with ui.card().classes(
+                                'w-full lg:w-[360px] rounded-3xl border border-slate-100 bg-white p-6 shadow-sm'
+                            ):
+                                with ui.row().classes('items-center gap-3 mb-4'):
+                                    with ui.element('div').classes(
+                                        'h-10 w-10 rounded-2xl bg-amber-50 flex items-center justify-center'
+                                    ):
+                                        ui.icon('receipt_long', size='1.35rem').classes('text-amber-500')
+                                    with ui.column().classes('gap-0'):
+                                        ui.label('Tóm tắt yêu cầu').classes(
+                                            'text-lg font-bold text-slate-900 font-outfit'
+                                        )
+                                        ui.label('Thông tin sẽ được dùng để tìm đơn vị phù hợp.').classes(
+                                            'text-xs text-slate-500'
+                                        )
+
+                                ui.separator().classes('mb-3')
+
+                                with ui.column().classes('w-full gap-3'):
+                                    with ui.row().classes('w-full items-start gap-3'):
+                                        ui.icon('directions_car', size='1.2rem').classes('text-blue-600 mt-0.5')
+                                        with ui.column().classes('gap-0 flex-1'):
+                                            ui.label('Phương tiện').classes(
+                                                'text-xs font-bold uppercase text-slate-400'
+                                            )
+                                            selected_vehicle = state.get('selected_vehicle') or {}
+                                            ui.label(
+                                                selected_vehicle.get('license_plate', 'Chưa chọn xe')
+                                            ).classes('text-sm font-bold text-slate-800')
+                                            if selected_vehicle:
+                                                ui.label(
+                                                    f"{selected_vehicle.get('brand', '')} {selected_vehicle.get('model', '')}".strip()
+                                                ).classes('text-xs text-slate-500')
+
+                                    with ui.row().classes('w-full items-start gap-3'):
+                                        ui.icon('place', size='1.2rem').classes('text-emerald-600 mt-0.5')
+                                        with ui.column().classes('gap-0 flex-1'):
+                                            ui.label('Địa chỉ cứu hộ').classes(
+                                                'text-xs font-bold uppercase text-slate-400'
+                                            )
+                                            summary_address = ui.label(
+                                                state.get('address') or 'Chưa lấy GPS'
+                                            ).classes('text-sm font-semibold text-slate-700 leading-snug')
+
+                                    with ui.row().classes('w-full items-start gap-3'):
+                                        ui.icon('build_circle', size='1.2rem').classes('text-amber-500 mt-0.5')
+                                        with ui.column().classes('gap-0 flex-1'):
+                                            ui.label('Loại sự cố').classes(
+                                                'text-xs font-bold uppercase text-slate-400'
+                                            )
+                                            summary_service = ui.label('Chưa chọn').classes(
+                                                'text-sm font-semibold text-slate-700'
+                                            )
+
+                                    with ui.row().classes('w-full items-start gap-3'):
+                                        ui.icon('notes', size='1.2rem').classes('text-slate-500 mt-0.5')
+                                        with ui.column().classes('gap-0 flex-1'):
+                                            ui.label('Mô tả').classes(
+                                                'text-xs font-bold uppercase text-slate-400'
+                                            )
+                                            summary_issue = ui.label('Chưa nhập mô tả').classes(
+                                                'text-sm font-semibold text-slate-700 leading-snug'
+                                            )
+
+                                def update_step2_summary():
+                                    summary_service.set_text(
+                                        service_mapping.get(svc_select.value, 'Chưa chọn')
+                                    )
+                                    summary_issue.set_text(issue_input.value or 'Chưa nhập mô tả')
+
+                                svc_select.on('update:model-value', lambda: update_step2_summary())
+                                issue_input.on('update:model-value', lambda: update_step2_summary())
 
                     with ui.stepper_navigation():
                         ui.button(
                             'Tìm cứu hộ',
-                            on_click=lambda: _search_companies(stepper, svc_select.value, issue_input.value, lat_input.value, lng_input.value)
-                        ).classes('bg-primary text-white px-8 py-3 rounded-lg font-bold hover:shadow-lg transition-all')
-                        ui.button('Quay lại', on_click=stepper.previous).classes(
-                            'px-8 py-3 rounded-lg font-bold border border-gray-300 text-gray-700'
-                        )
+                            icon='search',
+                            on_click=lambda: _search_companies(
+                                stepper,
+                                svc_select.value,
+                                issue_input.value,
+                                state['lat'],
+                                state['lng'],
+                            )
+                        ).classes(
+                            'bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 '
+                            'shadow-sm transition-all'
+                        ).props('unelevated')
+                        ui.button('Quay lại', icon='arrow_back', on_click=stepper.previous).classes(
+                            'px-6 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-100'
+                        ).props('flat')
 
                 # ── STEP 3: CHỌN ĐƠN VỊ ────────────────────────────────────────
                 with ui.step('Chọn Đơn Vị'):
@@ -269,47 +347,122 @@ def create_find_rescue_page():
                         )
 
         # --- Helper Logic ---
-        async def _get_gps(lat_f, lng_f, address_label):
+        async def _invalidate_map_size(map_id):
             try:
+                await ui.run_javascript(f"""
+                    setTimeout(function() {{
+                        var el = getElement({map_id});
+                        if (!el) return;
+                        var map = el._leaflet_map ?? el.leaflet ?? el._map;
+                        if (map) map.invalidateSize();
+                    }}, 120);
+                """, timeout=5.0)
+            except Exception:
+                pass
+
+        async def _sync_user_marker(map_id, lat, lng):
+            await ui.run_javascript(f"""
+                (function() {{
+                    var el = getElement({map_id});
+                    if (!el) return;
+                    var map = el._leaflet_map ?? el.leaflet ?? el._map;
+                    if (!map) return;
+
+                    var latlng = [{lat}, {lng}];
+                    var markerKey = '__rescueUserMarker_{map_id}';
+                    var blueIcon = L.icon({{
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    }});
+
+                    if (window[markerKey]) {{
+                        window[markerKey].setLatLng(latlng);
+                    }} else {{
+                        window[markerKey] = L.marker(latlng, {{ icon: blueIcon }}).addTo(map);
+                    }}
+
+                    window[markerKey]
+                        .setIcon(blueIcon)
+                        .bindPopup('<div style="font-weight:600;color:#2563eb;">Vị trí hiện tại của bạn</div>')
+                        .openPopup();
+
+                    map.invalidateSize();
+                    map.flyTo(latlng, 16, {{ animate: true, duration: 0.8 }});
+                    setTimeout(function() {{ map.invalidateSize(); }}, 250);
+                }})();
+            """, timeout=5.0)
+
+        async def _get_gps(address_label, gps_status_label, gps_status_icon, gps_button, map_id, summary_address):
+            try:
+                gps_button.props("loading")
+                gps_status_icon.props("name=sync")
+                gps_status_icon.classes(remove="text-slate-400 text-emerald-600 text-red-500")
+                gps_status_icon.classes("text-blue-600")
+                gps_status_label.set_text("Đang lấy vị trí GPS...")
+                address_label.set_text("Trình duyệt đang xác định vị trí hiện tại của bạn.")
+
                 pos = await ui.run_javascript('''
-                    new Promise((resolve) => {
+                    new Promise((resolve, reject) => {
                         if (!navigator.geolocation) {
-                            resolve({error: "Trình duyệt không hỗ trợ định vị (hoặc cần HTTPS)"});
+                            reject('Trình duyệt không hỗ trợ định vị GPS.');
                             return;
                         }
                         navigator.geolocation.getCurrentPosition(
                             position => {
                                 resolve({
                                     lat: position.coords.latitude,
-                                    lng: position.coords.longitude
+                                    lng: position.coords.longitude,
+                                    accuracy: position.coords.accuracy
                                 });
                             },
                             error => {
-                                resolve({error: error.message || "Lỗi khi lấy vị trí"});
+                                var messages = {
+                                    1: 'Bạn chưa cấp quyền truy cập vị trí.',
+                                    2: 'Không thể xác định vị trí hiện tại.',
+                                    3: 'Lấy vị trí quá thời gian chờ.'
+                                };
+                                reject(messages[error.code] || error.message || 'Không thể lấy GPS.');
                             },
                             { timeout: 10000, enableHighAccuracy: true }
                         );
                     });
-                ''', timeout=15.0)
-                
-                if pos and isinstance(pos, dict):
-                    if "error" in pos:
-                        ui.notify(f"✗ Không thể lấy GPS: {pos['error']}", type='negative')
-                    elif "lat" in pos and "lng" in pos:
-                        lat_f.set_value(pos['lat'])
-                        lng_f.set_value(pos['lng'])
-                        address = await get_location_text(lat_f.value, lng_f.value)
-                        address_label.set_text(f'📍 Địa chỉ: {address}')
-                        ui.notify(f"✓ Lấy GPS thành công: {pos['lat']:.4f}, {pos['lng']:.4f}", type='positive')
-                else:
-                    ui.notify("✗ Không thể lấy GPS: Lỗi không xác định", type='negative')
+                ''', timeout=15)
+                if pos:
+                    state['lat'] = pos['lat']
+                    state['lng'] = pos['lng']
+
+                    await _sync_user_marker(map_id, pos['lat'], pos['lng'])
+
+                    address = await get_location_text(pos['lat'], pos['lng'])
+                    state['address'] = address
+                    gps_status_icon.props("name=check_circle")
+                    gps_status_icon.classes(remove="text-blue-600 text-slate-400 text-red-500")
+                    gps_status_icon.classes("text-emerald-600")
+                    gps_status_label.set_text("Đã xác định vị trí")
+                    address_label.set_text(address)
+                    summary_address.set_text(address)
+                    ui.notify("Đã lấy GPS và cập nhật bản đồ thành công", type='positive')
 
             except Exception as e:
-                ui.notify(f"✗ Không thể lấy GPS: {str(e)}", type='negative')
+                gps_status_icon.props("name=error")
+                gps_status_icon.classes(remove="text-blue-600 text-slate-400 text-emerald-600")
+                gps_status_icon.classes("text-red-500")
+                gps_status_label.set_text("Không thể lấy vị trí")
+                address_label.set_text(str(e))
+                ui.notify(f"Không thể lấy GPS: {str(e)}", type='negative')
+            finally:
+                gps_button.props(remove="loading")
         # Tìm kiếm công ty 
         async def _search_companies(stepper, svc_id, issue, lat, lng):
             if not svc_id or not issue:
                 ui.notify("Vui lòng điền đủ thông tin", type='warning')
+                return
+            if not state.get('address'):
+                ui.notify("Vui lòng lấy vị trí GPS trước khi tìm cứu hộ", type='warning')
                 return
             
             # Get service name from mapping

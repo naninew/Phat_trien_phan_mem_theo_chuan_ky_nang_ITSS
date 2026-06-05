@@ -24,13 +24,52 @@ from app.schemas.rescue import (
     CustomerVehicleResponse,
     RescueCompanyCreate,
 )
-from app.services import rescue_svc, auth_svc
+from app.services import rescue_svc, auth_svc, chat_svc
 from app.utils.response import success_response
 from app.models.company import RescueCompany
 from app.models.service import Service
 
 
 router = APIRouter(prefix="/rescue", tags=["Rescue Services"])
+
+
+STATUS_NOTIFICATION_LABELS = {
+    "ACCEPTED": "đã được tiếp nhận",
+    "ASSIGNED": "đã được phân công đội cứu hộ",
+    "ON_THE_WAY": "đang được đội cứu hộ di chuyển tới",
+    "IN_PROGRESS": "đang được xử lý tại hiện trường",
+    "COMPLETED": "đã hoàn thành",
+    "REJECTED": "đã bị từ chối",
+    "CANCELLED": "đã bị hủy",
+}
+
+
+def _create_notification(
+    db: Session,
+    receiver_id: int,
+    title: str,
+    content: str,
+    request_id: Optional[int] = None,
+):
+    notif = chat_svc.create_notification(db, receiver_id, title, content, request_id)
+    payload = {
+        "type": "notification",
+        "notification": {
+            "id": notif.id,
+            "receiver_id": notif.receiver_id,
+            "request_id": notif.request_id,
+            "title": notif.title,
+            "content": notif.content,
+            "is_read": notif.is_read,
+            "sent_time": notif.sent_time.isoformat() if notif.sent_time else None,
+        },
+    }
+    try:
+        from app.routes.ws_routes import notification_manager
+        notification_manager.send_to_user_nowait(receiver_id, payload)
+    except Exception:
+        pass
+    return notif
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -286,6 +325,14 @@ def create_rescue_request(
 ):
     """Khách hàng gửi yêu cầu cứu hộ."""
     req = rescue_svc.create_rescue_request(db, current_user["user_id"], request_data)
+    if req.company and req.company.owner_id:
+        _create_notification(
+            db,
+            req.company.owner_id,
+            "Yêu cầu cứu hộ mới",
+            f"Khách hàng vừa gửi yêu cầu #{req.id} tại {req.address_description}.",
+            req.id,
+        )
 
     return success_response(
         data={
@@ -349,6 +396,8 @@ def get_my_requests(
 
         print("FINAL SERVICES DATA =", services_data)
 
+        review = r.review
+
         item = {
             "id": r.id,
             "status": r.status,
@@ -363,8 +412,9 @@ def get_my_requests(
             "agreed_price": r.agreed_price,
             "invoice_description": r.invoice_description,
             "payment_method": r.payment_method,
-            "rating": r.rating,
-            "feedback": r.feedback,
+            "has_review": review is not None,
+            "rating": review.rating if review else r.rating,
+            "feedback": review.comment if review else r.feedback,
             "created_at": r.created_at.isoformat(),
             "updated_at": r.updated_at.isoformat(),
         }
@@ -577,6 +627,13 @@ def accept_request(
     req = rescue_svc.accept_request(db, request_id, company.id, eta_minutes)
     if not req:
         raise HTTPException(status_code=400, detail="Không thể tiếp nhận yêu cầu")
+    _create_notification(
+        db,
+        req.user_id,
+        "Yêu cầu đã được tiếp nhận",
+        f"{company.company_name} đã tiếp nhận yêu cầu #{req.id}. ETA khoảng {req.eta_minutes or eta_minutes} phút.",
+        req.id,
+    )
 
     return success_response(
         data={"id": req.id, "status": req.status, "eta_minutes": req.eta_minutes},
@@ -600,6 +657,13 @@ def reject_request(
     req = rescue_svc.reject_request(db, request_id, company.id)
     if not req:
         raise HTTPException(status_code=400, detail="Không thể từ chối yêu cầu")
+    _create_notification(
+        db,
+        req.user_id,
+        "Yêu cầu đã bị từ chối",
+        f"{company.company_name} đã từ chối yêu cầu #{req.id}. Bạn có thể chọn đơn vị cứu hộ khác.",
+        req.id,
+    )
 
     return success_response(
         data={"id": req.id, "status": req.status},
@@ -624,6 +688,13 @@ def assign_request(
     req = rescue_svc.assign_request(db, request_id, company.id, assignment_data)
     if not req:
         raise HTTPException(status_code=400, detail="Không thể phân công (yêu cầu chưa được accept hoặc không hợp lệ)")
+    _create_notification(
+        db,
+        req.user_id,
+        "Đã phân công đội cứu hộ",
+        f"{company.company_name} đã phân công nhân sự và phương tiện cho yêu cầu #{req.id}.",
+        req.id,
+    )
 
     return success_response(
         data={"id": req.id, "status": req.status},
@@ -652,6 +723,15 @@ def update_request_status(
     )
     if not req:
         raise HTTPException(status_code=404, detail="Không tìm thấy yêu cầu")
+    if status_update.status:
+        label = STATUS_NOTIFICATION_LABELS.get(status_update.status, f"đã chuyển sang {status_update.status}")
+        _create_notification(
+            db,
+            req.user_id,
+            "Cập nhật trạng thái cứu hộ",
+            f"Yêu cầu #{req.id} {label}.",
+            req.id,
+        )
 
     return success_response(
         data={"id": req.id, "status": req.status},
@@ -679,6 +759,13 @@ def complete_request(
     )
     if not req:
         raise HTTPException(status_code=400, detail="Không thể hoàn thành yêu cầu")
+    _create_notification(
+        db,
+        req.user_id,
+        "Yêu cầu đã hoàn thành",
+        f"Yêu cầu #{req.id} đã hoàn thành. Bạn có thể đánh giá dịch vụ.",
+        req.id,
+    )
 
     return success_response(
         data={"id": req.id, "status": req.status, "agreed_price": req.agreed_price, "invoice_description": req.invoice_description},
