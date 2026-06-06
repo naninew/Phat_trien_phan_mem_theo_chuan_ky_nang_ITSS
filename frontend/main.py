@@ -40,6 +40,7 @@ from pages.customer.requests import create_requests_page
 from pages.customer.track import create_track_page
 from pages.customer.community import create_community_page
 from pages.customer.review import create_review_page
+from pages.customer.overview import create_overview_page
 from pages.company.dashboard import create_company_dashboard
 from pages.company.queue import create_queue_page
 from pages.company.staff import create_staff_page
@@ -275,6 +276,7 @@ def setup_app():
     create_customer_dashboard()
     create_vehicles_page()
     create_find_rescue_page()
+    create_overview_page()
     create_requests_page()
     create_track_page()
     create_community_page()

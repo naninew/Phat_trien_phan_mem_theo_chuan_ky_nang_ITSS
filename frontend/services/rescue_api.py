@@ -104,6 +104,8 @@ async def submit_review(request_id: int, rating: int, comment: str = "") -> Dict
         f"/rescue/requests/{request_id}/review",
         params={"rating": rating, "comment": comment},
     )
+    if not r.get("success"):
+        raise RuntimeError(r.get("message") or "Không thể gửi đánh giá")
     return r.get("data", {})
 
 

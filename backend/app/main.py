@@ -54,8 +54,9 @@ print("=== ĐƯỜNG DẪN STATIC THỰC TẾ BACKEND ĐANG TÌM ===")
 print(os.path.abspath(_uploads_dir))
 print("==================================================")
 
-# Tạo thư mục con 'images' nếu chưa có (.../backend/app/uploads/images)
+# Tạo các thư mục upload cần dùng
 os.makedirs(os.path.join(_uploads_dir, "images"), exist_ok=True)
+os.makedirs(os.path.join(_uploads_dir, "community"), exist_ok=True)
 
 # Mount thư mục tĩnh (chỉ giữ lại 1 lệnh duy nhất)
 app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")

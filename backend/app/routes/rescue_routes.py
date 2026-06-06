@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 from typing import Optional, List
+from datetime import datetime, timedelta
 
 from app.database import get_db
 from app.schemas.rescue import (
@@ -44,12 +45,25 @@ STATUS_NOTIFICATION_LABELS = {
 }
 
 
+def _review_meta(req, review) -> dict:
+    deadline = req.actual_completion_time + timedelta(days=7) if req.actual_completion_time else None
+    return {
+        "review_deadline": deadline.isoformat() if deadline else None,
+        "can_review": (
+            req.status == "COMPLETED"
+            and deadline is not None
+            and datetime.utcnow() <= deadline
+        ),
+    }
+
+
 def _create_notification(
     db: Session,
     receiver_id: int,
     title: str,
     content: str,
     request_id: Optional[int] = None,
+    request_status: Optional[str] = None,
 ):
     notif = chat_svc.create_notification(db, receiver_id, title, content, request_id)
     payload = {
@@ -62,6 +76,8 @@ def _create_notification(
             "content": notif.content,
             "is_read": notif.is_read,
             "sent_time": notif.sent_time.isoformat() if notif.sent_time else None,
+            "event": "request_status_update" if request_status else "notification",
+            "request_status": request_status,
         },
     }
     try:
@@ -378,6 +394,7 @@ def get_my_requests(
                     })
 
             review = r.review
+            review_meta = _review_meta(r, review)
 
             item = {
                 "id": r.id,
@@ -394,6 +411,8 @@ def get_my_requests(
                 "invoice_description": r.invoice_description,
                 "payment_method": r.payment_method,
                 "has_review": review is not None,
+                "can_review": review_meta["can_review"],
+                "review_deadline": review_meta["review_deadline"],
                 "rating": review.rating if review else r.rating,
                 "feedback": review.comment if review else r.feedback,
                 "created_at": r.created_at.isoformat(),
@@ -445,6 +464,7 @@ def get_request_detail(
     customer_vehicle = db.query(Vehicle).filter(Vehicle.id == req.vehicle_id).first() if req.vehicle_id else None
     
     review = req.review
+    review_meta = _review_meta(req, review)
     
     services_data = []
     for rs in req.request_services:
@@ -492,6 +512,8 @@ def get_request_detail(
             "actual_arrival_time": req.actual_arrival_time.isoformat() if req.actual_arrival_time else None,
             "actual_completion_time": req.actual_completion_time.isoformat() if req.actual_completion_time else None,
             "has_review": review is not None,
+            "can_review": review_meta["can_review"],
+            "review_deadline": review_meta["review_deadline"],
             "rating": review.rating if review else None,
             "feedback": review.comment if review else None,
             "assignment": assignment_data,
@@ -529,6 +551,8 @@ def submit_review(
     """Gửi đánh giá sau khi dịch vụ hoàn thành."""
     if not (1 <= rating <= 5):
         raise HTTPException(status_code=400, detail="Rating phải từ 1 đến 5")
+    if comment and len(comment) > 500:
+        raise HTTPException(status_code=400, detail="Nhận xét tối đa 500 ký tự")
 
     review = rescue_svc.submit_review(db, request_id, current_user["user_id"], rating, comment or None)
     if not review:
@@ -615,6 +639,7 @@ def accept_request(
         "Yêu cầu đã được tiếp nhận",
         f"{company.company_name} đã tiếp nhận yêu cầu #{req.id}. ETA khoảng {req.eta_minutes or eta_minutes} phút.",
         req.id,
+        req.status,
     )
 
     return success_response(
@@ -645,6 +670,7 @@ def reject_request(
         "Yêu cầu đã bị từ chối",
         f"{company.company_name} đã từ chối yêu cầu #{req.id}. Bạn có thể chọn đơn vị cứu hộ khác.",
         req.id,
+        req.status,
     )
 
     return success_response(
@@ -676,6 +702,7 @@ def assign_request(
         "Đã phân công đội cứu hộ",
         f"{company.company_name} đã phân công nhân sự và phương tiện cho yêu cầu #{req.id}.",
         req.id,
+        req.status,
     )
 
     return success_response(
@@ -713,6 +740,7 @@ def update_request_status(
             "Cập nhật trạng thái cứu hộ",
             f"Yêu cầu #{req.id} {label}.",
             req.id,
+            req.status,
         )
 
     return success_response(
@@ -747,6 +775,7 @@ def complete_request(
         "Yêu cầu đã hoàn thành",
         f"Yêu cầu #{req.id} đã hoàn thành. Bạn có thể đánh giá dịch vụ.",
         req.id,
+        req.status,
     )
 
     return success_response(

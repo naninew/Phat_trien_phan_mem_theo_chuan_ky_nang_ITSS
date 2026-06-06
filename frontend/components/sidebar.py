@@ -12,8 +12,8 @@ def create_sidebar():
     # Lấy đường dẫn hiện tại một cách chính xác (Ví dụ: '/', '/profile')
     current_route = ui.context.client.page.path
     
-    with ui.left_drawer(value=True).classes('bg-white border-r border-gray-100 p-4 flex flex-col') as drawer:
-        with ui.column().classes('w-full gap-2 flex-1'):
+    with ui.left_drawer(value=True).classes('bg-white border-r border-gray-100 p-3 flex flex-col') as drawer:
+        with ui.column().classes('w-full gap-1 flex-1'):
             
             if role == 'customer':
                 _nav_item('Dashboard', 'dashboard', CUSTOMER_DASHBOARD, current_route)
@@ -38,7 +38,7 @@ def create_sidebar():
                 _nav_item('Báo Cáo Hệ Thống', 'analytics', '/admin/reports', current_route)
                 _nav_item('Kiểm Duyệt', 'gavel', '/admin/moderation', current_route)
 
-            ui.separator().classes('my-4')
+            ui.separator().classes('my-3')
 
             # Profile link — route depends on role
             if role == 'admin':
@@ -47,7 +47,7 @@ def create_sidebar():
                 _nav_item('Hồ Sơ Cá Nhân', 'person', '/profile', current_route)
 
         # ── Logout button pinned at the bottom ─────────────────────────────
-        ui.separator().classes('my-2')
+        ui.separator().classes('my-1')
         with ui.row().classes(
             'w-full items-center gap-3 px-4 py-3 rounded-xl cursor-pointer '
             'hover:bg-red-50 transition-colors group'
@@ -82,7 +82,7 @@ def _nav_item(label, icon, target, current_route):
     route_clean = current_route if current_route else '/'
     target_clean = target if target else '/'
     is_active = (route_clean == target_clean)
-    base_classes = 'w-full items-center gap-3 px-4 py-3 rounded-xl cursor-pointer font-medium transition-colors group'
+    base_classes = 'w-full items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer font-medium transition-colors group'
     
     if is_active:
         row_classes = f'{base_classes} bg-blue-50'

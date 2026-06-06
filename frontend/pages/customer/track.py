@@ -33,6 +33,12 @@ def _ws_url(request_id: int, token: str) -> str:
     return f"{base}/ws/chat/{request_id}?token={token}"
 
 
+def _notification_ws_url(token: str) -> str:
+    """Build notification WebSocket URL from BACKEND_URL (http→ws)."""
+    base = BACKEND_URL.replace("https://", "wss://").replace("http://", "ws://")
+    return f"{base}/ws/notifications?token={token}"
+
+
 def get_route(start: tuple, end: tuple) -> tuple[list[list[float]], float, float]:
     """
     Fetch a real driving route from OSRM.
@@ -66,17 +72,20 @@ def get_route(start: tuple, end: tuple) -> tuple[list[list[float]], float, float
 STATUS_COLORS: dict[str, str] = {
     "PENDING":   "warning",
     "ACCEPTED":  "info",
-    "EN_ROUTE":  "primary",
-    "ON_SITE":   "secondary",
+    "ASSIGNED":  "primary",
+    "ON_THE_WAY": "primary",
+    "IN_PROGRESS": "secondary",
     "COMPLETED": "positive",
     "CANCELLED": "negative",
+    "REJECTED":  "negative",
 }
 
 TIMELINE_STEPS = [
     ("Gửi yêu cầu",    "PENDING",   "history"),
     ("Tiếp nhận",       "ACCEPTED",  "check_circle"),
-    ("Đang di chuyển",  "EN_ROUTE",  "local_shipping"),
-    ("Đang xử lý",      "ON_SITE",   "engineering"),
+    ("Phân công",        "ASSIGNED",  "assignment"),
+    ("Đang di chuyển",  "ON_THE_WAY",  "local_shipping"),
+    ("Đang xử lý",      "IN_PROGRESS",   "engineering"),
     ("Hoàn thành",      "COMPLETED", "task_alt"),
 ]
 
@@ -216,6 +225,9 @@ def create_track_page() -> None:
                             send_btn = ui.button(
                                 icon="send",
                             ).props("round unelevated color=primary")
+                        chat_lock_notice = ui.label(
+                            "Yêu cầu đã hoàn thành, cuộc trò chuyện đã được khóa."
+                        ).classes("hidden mt-2 text-xs font-semibold text-slate-500")
 
                 # ── RIGHT ────────────────────────────────────────────────
                 with ui.column().classes("w-[360px] gap-6"):
@@ -247,6 +259,7 @@ def create_track_page() -> None:
         chat_state = {
             "sending": False,
             "next_temp_id": 1,
+            "locked": False,
         }
 
         @ui.refreshable
@@ -452,7 +465,7 @@ def create_track_page() -> None:
         # ── SEND MESSAGE ─────────────────────────────────────────────────
 
         async def do_send(client_context) -> None:
-            if chat_state["sending"]:
+            if chat_state["sending"] or chat_state["locked"]:
                 return
 
             val = chat_input.value.strip()
@@ -642,10 +655,9 @@ def create_track_page() -> None:
                     invoice_desc = req.get("invoice_description")
                     with ui.card().classes("w-full rounded-[28px] border-2 border-emerald-500 bg-emerald-50 p-6 shadow-lg"):
                         with ui.column().classes("w-full items-center text-center gap-2"):
-                            ui.icon("check_circle", size="3rem").classes("text-emerald-500")
-                            ui.label("Cứu Hộ Hoàn Tất").classes("text-xl font-bold text-emerald-700")
+                            ui.icon("payments", size="3rem").classes("text-emerald-500")
+                            ui.label("Số tiền cần trả").classes("text-xl font-bold text-emerald-700")
                             if price is not None:
-                                ui.label("Số tiền thanh toán:").classes("text-sm text-emerald-600 mt-2")
                                 ui.label(f"{price:,.0f} đ").classes("text-3xl font-bold text-emerald-800")
                                 if invoice_desc:
                                     ui.label("Chi tiết hoá đơn:").classes("text-xs text-emerald-600 mt-2 font-semibold")
@@ -653,22 +665,13 @@ def create_track_page() -> None:
                             else:
                                 ui.label("Đang chờ cập nhật chi phí...").classes("italic opacity-70")
 
-                    if req.get("has_review"):
-                        ui.button(
-                            "XEM ĐÁNH GIÁ",
-                            icon="rate_review",
-                            on_click=lambda: ui.navigate.to(f"/customer/review/{request_id}"),
-                        ).classes(
-                            "w-full rounded-2xl font-bold py-4 bg-emerald-600 text-white"
-                        ).props("unelevated")
-                    else:
-                        ui.button(
-                            "ĐÁNH GIÁ DỊCH VỤ",
-                            icon="star",
-                            on_click=lambda: ui.navigate.to(f"/customer/review/{request_id}"),
-                        ).classes(
-                            "w-full rounded-2xl font-bold py-4 bg-amber-500 text-white"
-                        ).props("unelevated")
+                    ui.button(
+                        "XEM ĐÁNH GIÁ" if req.get("has_review") else "OK",
+                        icon="check",
+                        on_click=lambda: ui.navigate.to(f"/customer/review/{request_id}"),
+                    ).classes(
+                        "w-full rounded-2xl font-bold py-4 bg-emerald-600 text-white"
+                    ).props("unelevated")
 
         async def confirm_cancel() -> None:
             with ui.dialog() as dlg, ui.card().classes("p-8 rounded-[28px] w-[420px]"):
@@ -710,6 +713,19 @@ def create_track_page() -> None:
 
             status_chip.set_text(req["status"])
             status_chip.props(f"color={STATUS_COLORS.get(req['status'], 'grey')}")
+            if req["status"] == "COMPLETED":
+                chat_state["locked"] = True
+                chat_input.disable()
+                send_btn.disable()
+                chat_input.props('placeholder="Cuộc trò chuyện đã khóa"')
+                chat_lock_notice.classes(remove="hidden")
+            else:
+                chat_state["locked"] = False
+                chat_input.enable()
+                if not chat_state["sending"]:
+                    send_btn.enable()
+                chat_input.props('placeholder="Nhập tin nhắn..."')
+                chat_lock_notice.classes(add="hidden")
 
             try:
                 await update_map(req)
@@ -720,17 +736,48 @@ def create_track_page() -> None:
             render_company(req)
             render_actions(req)
 
+        async def _status_ws_listener() -> None:
+            if not _HAS_WEBSOCKETS:
+                return
+
+            while get_access_token():
+                try:
+                    async with websockets.connect(
+                        _notification_ws_url(token),
+                        ping_interval=20,
+                        ping_timeout=10,
+                        close_timeout=5,
+                    ) as ws:
+                        async for raw in ws:
+                            try:
+                                data = json.loads(raw)
+                            except json.JSONDecodeError:
+                                continue
+
+                            notification = data.get("notification") or {}
+                            event_request_id = notification.get("request_id") or data.get("request_id")
+                            if data.get("type") == "notification" and int(event_request_id or 0) == int(request_id):
+                                await update_ui()
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    print(f"[track status ws] {exc}")
+                    await asyncio.sleep(3)
+
         # ────────────────────────────────────────────────────────────────
         # TIMERS & CLEANUP
         # ────────────────────────────────────────────────────────────────
 
         update_timer = ui.timer(5.0, update_ui)
+        status_ws_task = asyncio.create_task(_status_ws_listener()) if _HAS_WEBSOCKETS else None
 
         def cleanup() -> None:
             update_timer.deactivate()
             task = _ws_task_ref.get("task")
             if task and not task.done():
                 task.cancel()
+            if status_ws_task and not status_ws_task.done():
+                status_ws_task.cancel()
 
         ui.context.client.on_disconnect(cleanup)
 

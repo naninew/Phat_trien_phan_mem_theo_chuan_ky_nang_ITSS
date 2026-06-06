@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+import uuid
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -8,6 +11,51 @@ from app.services import auth_svc, community_svc
 from app.utils.response import success_response
 
 router = APIRouter(prefix="/community", tags=["Community"])
+
+COMMUNITY_UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "uploads", "community")
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+MAX_IMAGE_SIZE = 5 * 1024 * 1024
+
+
+def _validate_community_image(file: UploadFile) -> None:
+    if not file.filename:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No file provided")
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File type not allowed. Allowed types: {', '.join(sorted(ALLOWED_IMAGE_EXTENSIONS))}",
+        )
+
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+    if file_size > MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File too large. Maximum size: {MAX_IMAGE_SIZE // (1024 * 1024)}MB",
+        )
+
+
+@router.post("/upload-image", response_model=dict)
+def upload_community_image(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    """Upload ảnh cho bài đăng cộng đồng."""
+    _validate_community_image(file)
+    os.makedirs(COMMUNITY_UPLOAD_DIR, exist_ok=True)
+
+    ext = os.path.splitext(file.filename)[1].lower() or ".jpg"
+    filename = f"{current_user['user_id']}_{uuid.uuid4().hex}{ext}"
+    file_path = os.path.join(COMMUNITY_UPLOAD_DIR, filename)
+
+    with open(file_path, "wb") as buffer:
+        buffer.write(file.file.read())
+
+    image_url = f"/uploads/community/{filename}"
+    return success_response(data={"image_url": image_url}, message="Đã tải ảnh lên")
 
 @router.post("/posts", response_model=dict)
 def create_post(
@@ -24,6 +72,7 @@ def create_post(
         "user_name": post.user.full_name,
         "title": post.title,
         "content": post.content,
+        "images": post.images,
         "incident_type": post.incident_type,
         "is_closed": post.is_closed,
         "created_at": post.created_at.isoformat()
@@ -46,6 +95,7 @@ def get_posts(
             "user_name": p.user.full_name,
             "title": p.title,
             "content": p.content,
+            "images": p.images,
             "incident_type": p.incident_type,
             "is_closed": p.is_closed,
             "created_at": p.created_at.isoformat(),
@@ -102,7 +152,8 @@ def create_reply(
     return success_response(data={
         "id": reply.id,
         "content": reply.content,
-        "user_name": current_user["username"]
+        "user_name": current_user["username"],
+        "created_at": reply.created_at.isoformat(),
     }, message="Đã gửi phản hồi")
 
 @router.put("/replies/{reply_id}/helpful", response_model=dict)
@@ -146,3 +197,35 @@ def update_post(
         },
         message="Cập nhật bài đăng thành công"
     )
+
+
+@router.delete("/posts/{post_id}", response_model=dict)
+def delete_post(
+    post_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    ok = community_svc.delete_post(db, post_id, current_user["user_id"])
+    if not ok:
+        raise HTTPException(
+            status_code=404,
+            detail="Không tìm thấy bài đăng hoặc bạn không có quyền xoá",
+        )
+
+    return success_response(data={"id": post_id}, message="Đã xoá bài đăng")
+
+
+@router.post("/posts/{post_id}/delete", response_model=dict)
+def delete_post_action(
+    post_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(auth_svc.get_current_user_from_token),
+):
+    ok = community_svc.delete_post(db, post_id, current_user["user_id"])
+    if not ok:
+        raise HTTPException(
+            status_code=404,
+            detail="Không tìm thấy bài đăng hoặc bạn không có quyền xoá",
+        )
+
+    return success_response(data={"id": post_id}, message="Đã xoá bài đăng")

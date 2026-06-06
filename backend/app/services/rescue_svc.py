@@ -5,7 +5,7 @@ Handles: nearby search (Haversine), request lifecycle, vehicles, services, revie
 from __future__ import annotations
 
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
 from sqlalchemy import func
@@ -483,10 +483,29 @@ def submit_review(
         return None
     if not req.company_id:
         return None
+    if not req.actual_completion_time:
+        return None
+    if datetime.utcnow() > req.actual_completion_time + timedelta(days=7):
+        return None
 
     # Kiểm tra đã review chưa
     existing = db.query(Review).filter(Review.rescue_request_id == request_id).first()
     if existing:
+        existing.rating = rating
+        existing.comment = comment
+        existing.updated_at = datetime.utcnow()
+        company = get_company_by_id(db, req.company_id)
+        if company:
+            all_ratings = db.query(func.avg(Review.rating)).filter(
+                Review.company_id == req.company_id
+            ).scalar()
+            rating_count = db.query(func.count(Review.id)).filter(
+                Review.company_id == req.company_id
+            ).scalar()
+            company.rating_avg = round(float(all_ratings or rating), 2)
+            company.rating_count = int(rating_count or 0)
+        db.commit()
+        db.refresh(existing)
         return existing
 
     review = Review(

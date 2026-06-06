@@ -38,6 +38,18 @@ def update_post(db: Session, post_id: int, user_id: int, post_data: PostUpdate) 
     db.refresh(post)
     return post
 
+def delete_post(db: Session, post_id: int, user_id: int) -> bool:
+    post = db.query(CommunityPost).filter(
+        CommunityPost.id == post_id,
+        CommunityPost.user_id == user_id,
+    ).first()
+    if not post:
+        return False
+
+    db.delete(post)
+    db.commit()
+    return True
+
 def create_reply(db: Session, user_id: int, post_id: int, reply_data: ReplyCreate) -> CommunityReply:
     new_reply = CommunityReply(
         post_id=post_id,

@@ -1,14 +1,17 @@
 """
 Shared profile editing page for customers and company staff.
 """
+import inspect
+import mimetypes
+import os
 import re
 
 import httpx
-from nicegui import ui
+from nicegui import app, ui
 
 from components.page_layout import page_layout
 from core.auth import get_access_token, get_user_role
-from core.config import BACKEND_URL
+from core.config import BACKEND_URL, SESSION_USER_KEY
 
 
 def calculate_password_strength(password: str) -> dict:
@@ -45,6 +48,44 @@ def _avatar_url(path: str | None) -> str:
     if path.startswith("http://") or path.startswith("https://"):
         return path
     return f"{BACKEND_URL.replace('/api/v1', '')}{path}"
+
+
+def _sync_current_user(data: dict) -> None:
+    stored = app.storage.user.get(SESSION_USER_KEY) or {}
+    for key in ("id", "username", "full_name", "role", "avatar_url"):
+        if key in data:
+            stored[key] = data.get(key)
+    app.storage.user[SESSION_USER_KEY] = stored
+
+
+async def _read_upload_content(upload_event) -> tuple[str, bytes, str]:
+    """Normalize NiceGUI upload events across versions."""
+    file_obj = getattr(upload_event, "file", None)
+    content_obj = getattr(upload_event, "content", None) or file_obj
+    if content_obj is None or not hasattr(content_obj, "read"):
+        raise ValueError("Không đọc được file ảnh đã chọn")
+
+    raw_content = content_obj.read()
+    if inspect.isawaitable(raw_content):
+        raw_content = await raw_content
+    if isinstance(raw_content, str):
+        raw_content = raw_content.encode()
+    if not raw_content:
+        raise ValueError("File ảnh rỗng hoặc không hợp lệ")
+
+    raw_name = getattr(upload_event, "name", None) or getattr(file_obj, "name", None) or "avatar.jpg"
+    filename = os.path.basename(str(raw_name)) or "avatar.jpg"
+    content_type = (
+        getattr(upload_event, "type", None)
+        or getattr(file_obj, "content_type", None)
+        or mimetypes.guess_type(filename)[0]
+        or "application/octet-stream"
+    )
+
+    if "." not in filename:
+        filename = f"{filename}{mimetypes.guess_extension(content_type) or '.jpg'}"
+
+    return filename, raw_content, content_type
 
 
 def create_profile_page():
@@ -177,14 +218,38 @@ def create_profile_page():
                 color: white;
                 font-size: 22px;
                 line-height: 1;
+                pointer-events: none;
+                z-index: 1;
             }
 
             .avatar-uploader .q-uploader__title,
             .avatar-uploader .q-uploader__subtitle,
-            .avatar-uploader .q-uploader__list,
-            .avatar-uploader .q-uploader__header-content,
-            .avatar-uploader .q-uploader__header .q-btn {
+            .avatar-uploader .q-uploader__list {
                 display: none !important;
+            }
+
+            .avatar-uploader .q-uploader__header-content {
+                position: absolute !important;
+                inset: 0 !important;
+                z-index: 2 !important;
+                width: 42px !important;
+                height: 42px !important;
+                padding: 0 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+            }
+
+            .avatar-uploader .q-uploader__header .q-btn {
+                position: absolute !important;
+                inset: 0 !important;
+                z-index: 3 !important;
+                width: 42px !important;
+                height: 42px !important;
+                min-height: 42px !important;
+                opacity: 0 !important;
+                cursor: pointer !important;
+                display: flex !important;
             }
 
             .avatar-camera {
@@ -327,6 +392,7 @@ def create_profile_page():
                     return
 
                 data = r.json()["data"]
+                _sync_current_user(data)
                 profile_data.update(
                     {
                         "avatar_url": data.get("avatar_url"),
@@ -364,17 +430,18 @@ def create_profile_page():
         async def _handle_upload(e):
             avatar_status.clear()
             try:
-                content = await e.file.read()
+                filename, content, content_type = await _read_upload_content(e)
                 async with httpx.AsyncClient() as client:
                     r = await client.post(
                         f"{BACKEND_URL}/profile/me/avatar",
-                        files={"file": (e.file.name, content, e.file.content_type)},
+                        files={"file": (filename, content, content_type)},
                         headers={"Authorization": f"Bearer {token}"},
                     )
 
                 if r.status_code == 200:
                     new_url = r.json()["data"]["avatar_url"]
                     profile_data["avatar_url"] = new_url
+                    _sync_current_user({"avatar_url": new_url})
                     avatar_img.set_source(_avatar_url(new_url))
                     avatar_img.set_visibility(True)
                     avatar_initial.set_visibility(False)
@@ -383,8 +450,12 @@ def create_profile_page():
                     ui.notify("Cập nhật ảnh đại diện thành công", type="positive")
                     return
 
+                try:
+                    detail = r.json().get("detail", r.text)
+                except Exception:
+                    detail = r.text
                 with avatar_status:
-                    ui.label(f"Lỗi upload ảnh: {r.text}").classes("error-banner")
+                    ui.label(f"Lỗi upload ảnh: {detail}").classes("error-banner")
             except Exception as exc:
                 with avatar_status:
                     ui.label(f"Lỗi kết nối: {exc}").classes("error-banner")
@@ -412,6 +483,12 @@ def create_profile_page():
                         ui.label(f"Lỗi lưu hồ sơ: {detail}").classes("error-banner")
                     return
 
+                _sync_current_user(
+                    {
+                        "full_name": name_input.value,
+                        "avatar_url": profile_data.get("avatar_url"),
+                    }
+                )
                 header_name.set_text(name_input.value or profile_data["username"] or "Người dùng")
                 header_email.set_text(email_input.value or "Chưa cập nhật email")
                 with profile_status:
@@ -537,7 +614,7 @@ def create_profile_page():
                                 on_upload=_handle_upload,
                                 label="",
                                 auto_upload=True,
-                            ).props("flat dense color=primary accept=image/*").classes(
+                            ).props("flat dense color=primary accept=image/* max-files=1").classes(
                                 "avatar-uploader"
                             )
                         with ui.column().classes("min-w-0 flex-1 gap-1"):

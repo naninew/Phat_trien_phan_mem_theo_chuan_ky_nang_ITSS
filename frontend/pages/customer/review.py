@@ -105,10 +105,10 @@ def create_review_page():
 
                         ui.separator().classes("mb-5")
 
-                        if req.get("has_review"):
+                        if req.get("has_review") and not req.get("can_review", False):
                             with ui.column().classes("w-full items-center gap-3 py-4"):
                                 ui.icon("check_circle", size="3rem", color="positive")
-                                ui.label("Bạn đã đánh giá dịch vụ này").classes(
+                                ui.label("Đánh giá của bạn").classes(
                                     "text-xl font-bold text-emerald-700"
                                 )
                                 if req.get("rating"):
@@ -128,7 +128,27 @@ def create_review_page():
                                 ui.button(
                                     "Quay lại danh sách",
                                     icon="arrow_back",
-                                    on_click=lambda: ui.navigate.to("/customer/requests"),
+                                    on_click=lambda: ui.navigate.to(f"/customer/track/{request_id}"),
+                                ).classes(
+                                    "mt-2 rounded-xl bg-blue-600 px-5 py-2 font-semibold text-white hover:bg-blue-700"
+                                ).props("unelevated")
+                        elif not req.get("can_review", True):
+                            with ui.column().classes("w-full items-center gap-3 py-4"):
+                                ui.icon("event_busy", size="3rem").classes("text-slate-400")
+                                ui.label("Đã quá hạn đánh giá").classes(
+                                    "text-xl font-bold text-slate-700"
+                                )
+                                ui.label(
+                                    "Bạn chỉ có thể đánh giá dịch vụ trong vòng 7 ngày kể từ khi hoàn thành."
+                                ).classes("max-w-md text-center text-sm text-slate-500")
+                                if req.get("review_deadline"):
+                                    ui.label(f"Hạn đánh giá: {format_time(req.get('review_deadline'))}").classes(
+                                        "rounded-xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600"
+                                    )
+                                ui.button(
+                                    "Quay lại chi tiết",
+                                    icon="arrow_back",
+                                    on_click=lambda: ui.navigate.to(f"/customer/track/{request_id}"),
                                 ).classes(
                                     "mt-2 rounded-xl bg-blue-600 px-5 py-2 font-semibold text-white hover:bg-blue-700"
                                 ).props("unelevated")
@@ -137,7 +157,7 @@ def create_review_page():
                                 "text-sm font-bold uppercase text-slate-500"
                             )
 
-                            rating_state = {'value': 5}
+                            rating_state = {'value': int(req.get("rating") or 5)}
                             rating_text = ui.label(RATING_LABELS[rating_state['value']]).classes(
                                 "mt-2 text-lg font-bold text-amber-600"
                             )
@@ -160,11 +180,17 @@ def create_review_page():
                                     "Ví dụ: đội cứu hộ đến đúng giờ, tư vấn rõ ràng, "
                                     "xử lý chuyên nghiệp và chi phí minh bạch..."
                                 ),
-                            ).classes("w-full mt-2").props("outlined rows=6")
+                                value=req.get("feedback") or "",
+                            ).classes("w-full mt-2").props("outlined rows=6 maxlength=500 counter")
+
+                            if req.get("review_deadline"):
+                                ui.label(f"Hạn đánh giá: {format_time(req.get('review_deadline'))}").classes(
+                                    "mt-2 text-xs font-semibold text-slate-500"
+                                )
 
                             with ui.row().classes("w-full justify-end mt-5"):
                                 submit_btn = ui.button(
-                                    "Gửi đánh giá",
+                                    "Cập nhật đánh giá" if req.get("has_review") else "Gửi đánh giá",
                                     icon="send",
                                     on_click=lambda: _do_submit(),
                                 ).classes(
@@ -231,10 +257,14 @@ def create_review_page():
         async def _do_submit():
             submit_btn.props("loading")
             try:
+                comment = (comment_area.value or "").strip()
+                if len(comment) > 500:
+                    ui.notify("Nhận xét tối đa 500 ký tự", type="warning")
+                    return
                 await submit_review(
                     request_id=request_id,
                     rating=rating_state['value'],
-                    comment=comment_area.value,
+                    comment=comment,
                 )
                 ui.notify("Cảm ơn bạn đã gửi đánh giá!", type="positive")
                 ui.navigate.to("/customer/requests")

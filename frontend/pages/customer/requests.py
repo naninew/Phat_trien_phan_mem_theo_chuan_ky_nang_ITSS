@@ -2,14 +2,23 @@
 Trang danh sách yêu cầu cứu hộ của khách hàng.
 """
 
+import asyncio
+import json
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 from nicegui import ui
 
-from core.auth import require_role
+from core.auth import get_access_token, require_role
+from core.config import BACKEND_URL
 from components.page_layout import page_layout
 from services.rescue_api import cancel_request, get_my_requests
+
+try:
+    import websockets
+    _HAS_WEBSOCKETS = True
+except ImportError:
+    _HAS_WEBSOCKETS = False
 
 
 STATUS_MAP = {
@@ -83,6 +92,11 @@ TIMELINE_STEPS = [
 ]
 
 
+def _notification_ws_url(token: str) -> str:
+    base = BACKEND_URL.replace("https://", "wss://").replace("http://", "ws://")
+    return f"{base}/ws/notifications?token={token}"
+
+
 def create_requests_page():
 
     @ui.page('/customer/requests')
@@ -97,6 +111,7 @@ def create_requests_page():
             "search": "",
             "time": "all",
             "service": "all",
+            "status_ws_task": None,
         }
 
         def status_config(status: str) -> Dict[str, str]:
@@ -347,8 +362,9 @@ def create_requests_page():
                 for request in reqs:
                     _render_request_item(request)
 
-        async def _load_data():
-            refresh_btn.props("loading")
+        async def _load_data(show_loading: bool = True):
+            if show_loading:
+                refresh_btn.props("loading")
             try:
                 # Lấy dữ liệu từ server
                 new_requests = await get_my_requests()
@@ -365,7 +381,8 @@ def create_requests_page():
                 ui.notify(f"Lỗi tải dữ liệu: {e}", type="negative")
                 print(f"[ERROR] _load_data: {e}")
             finally:
-                refresh_btn.props(remove="loading")
+                if show_loading:
+                    refresh_btn.props(remove="loading")
 
         def _render_company(r: Dict[str, Any]):
             company_name = r.get("company_name")
@@ -426,10 +443,9 @@ def create_requests_page():
         def _render_request_item(r: Dict[str, Any]):
             config = status_config(r.get("status"))
             price, price_label = request_price(r)
-            needs_review = r.get("status") == "COMPLETED" and not r.get("has_review")
-            target_url = f"/customer/review/{r['id']}" if needs_review else f"/customer/track/{r['id']}"
-            button_text = "Đánh giá" if needs_review else "Theo dõi"
-            button_icon = "rate_review" if needs_review else "visibility"
+            target_url = f"/customer/track/{r['id']}"
+            button_text = "Theo dõi"
+            button_icon = "visibility"
 
             with ui.card().classes(
                 "w-full overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm "
@@ -519,20 +535,60 @@ def create_requests_page():
         # Lưu trữ timer để tránh race conditions
         _timer_ref = {"timer": None, "loading": False}
         
-        async def _safe_load_data():
+        async def _safe_load_data(show_loading: bool = False):
             """Load dữ liệu với guard chống race condition"""
             if _timer_ref["loading"]:
                 return
             _timer_ref["loading"] = True
             try:
-                await _load_data()
+                await _load_data(show_loading=show_loading)
             finally:
                 _timer_ref["loading"] = False
         
-        _timer_ref["timer"] = ui.timer(30, _safe_load_data)
+        async def _status_ws_listener():
+            if not _HAS_WEBSOCKETS:
+                return
+
+            token = get_access_token()
+            if not token:
+                return
+
+            while get_access_token():
+                try:
+                    async with websockets.connect(
+                        _notification_ws_url(token),
+                        ping_interval=20,
+                        ping_timeout=10,
+                        close_timeout=5,
+                    ) as ws:
+                        async for raw in ws:
+                            try:
+                                data = json.loads(raw)
+                            except json.JSONDecodeError:
+                                continue
+
+                            notification = data.get("notification") or {}
+                            request_id = notification.get("request_id") or data.get("request_id")
+                            if data.get("type") == "notification" and request_id:
+                                await _safe_load_data(show_loading=False)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    print(f"[requests status ws] {exc}")
+                    await asyncio.sleep(3)
+
+        async def _periodic_refresh():
+            await _safe_load_data(show_loading=False)
+
+        _timer_ref["timer"] = ui.timer(30, _periodic_refresh)
+        if _HAS_WEBSOCKETS:
+            state["status_ws_task"] = asyncio.create_task(_status_ws_listener())
         
         def _cleanup():
             if _timer_ref["timer"]:
                 _timer_ref["timer"].deactivate()
+            task = state.get("status_ws_task")
+            if task and not task.done():
+                task.cancel()
         
         ui.context.client.on_disconnect(_cleanup)

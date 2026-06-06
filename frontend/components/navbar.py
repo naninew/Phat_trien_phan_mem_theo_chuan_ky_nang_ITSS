@@ -1,6 +1,7 @@
 import asyncio
 import json
 
+import httpx
 from nicegui import app, ui
 from core.auth import is_authenticated, get_access_token, get_user_name, logout_user, get_user_role
 from core.config import APP_TITLE, BACKEND_URL, LOGIN_PAGE
@@ -34,16 +35,84 @@ def create_navbar():
                 # User Profile Dropdown
                 with ui.button().props('flat').classes('px-2 py-1 text-on-surface font-semibold !text-white'):
                     with ui.row().classes("items-center gap-2"):
-                        ui.avatar(icon="account_circle", size="md").classes("bg-white/20 text-white")
+                        nav_avatar_slot = ui.element("div")
+                        def _render_nav_avatar():
+                            nav_avatar_slot.clear()
+                            with nav_avatar_slot:
+                                _render_user_avatar()
+                        _render_nav_avatar()
                         ui.label(get_user_name()).classes("font-bold hide-on-mobile")
                     with ui.menu() as menu:
+                        if get_user_role() == "customer":
+                            ui.menu_item('Tổng quan', on_click=lambda: ui.navigate.to('/customer/overview'))
                         ui.menu_item('Hồ sơ cá nhân', on_click=lambda: ui.navigate.to('/profile'))
                         ui.menu_item('Cài đặt', on_click=_open_settings_dialog)
                         ui.separator()
                         ui.menu_item('Đăng xuất', on_click=logout_user).classes('text-red-500 hover:bg-red-50')
+                    ui.timer(
+                        0.2,
+                        lambda: asyncio.create_task(_refresh_current_user_profile(_render_nav_avatar)),
+                        once=True,
+                    )
             else:
                 ui.button('Đăng Nhập', on_click=lambda: ui.navigate.to(LOGIN_PAGE)).props('flat').classes('text-primary font-semibold')
                 ui.button('Đăng Ký', on_click=lambda: ui.navigate.to('/register')).classes('btn-primary px-4')
+
+
+def _avatar_url(path: str | None) -> str:
+    if not path:
+        return ""
+    if path.startswith("http://") or path.startswith("https://"):
+        return path
+    return f"{BACKEND_URL.replace('/api/v1', '')}{path}"
+
+
+def _current_avatar_url() -> str:
+    user = app.storage.user.get("user_info") or {}
+    return _avatar_url(user.get("avatar_url"))
+
+
+def _render_user_avatar(size_class: str = "h-8 w-8", image_classes: str = "h-full w-full rounded-full object-cover"):
+    avatar_url = _current_avatar_url()
+    with ui.element("div").classes(
+        f"{size_class} shrink-0 overflow-hidden rounded-full bg-white/20 flex items-center justify-center"
+    ) as avatar_box:
+        if avatar_url:
+            ui.image(avatar_url).classes(image_classes)
+        else:
+            ui.icon("account_circle").classes("text-white")
+    return avatar_box
+
+
+async def _refresh_current_user_profile(render_avatar=None):
+    token = get_access_token()
+    if not token:
+        return
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{BACKEND_URL}/profile/me",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=5,
+            )
+        if response.status_code != 200:
+            return
+        data = response.json().get("data") or {}
+        stored = app.storage.user.get("user_info") or {}
+        stored.update(
+            {
+                "id": data.get("id", stored.get("id")),
+                "username": data.get("username", stored.get("username")),
+                "full_name": data.get("full_name", stored.get("full_name")),
+                "role": data.get("role", stored.get("role")),
+                "avatar_url": data.get("avatar_url"),
+            }
+        )
+        app.storage.user["user_info"] = stored
+        if render_avatar:
+            render_avatar()
+    except Exception:
+        return
 
 
 def _get_ui_settings():
@@ -381,7 +450,14 @@ def _open_settings_dialog():
 
             with ui.column().classes("w-full gap-4 px-6 py-5"):
                 with ui.row().classes("w-full items-center gap-3 rounded-2xl bg-slate-50 p-4"):
-                    ui.avatar(icon="account_circle").classes("bg-blue-100 text-blue-700")
+                    avatar_url = _current_avatar_url()
+                    with ui.element("div").classes(
+                        "h-10 w-10 shrink-0 overflow-hidden rounded-full bg-blue-100 flex items-center justify-center"
+                    ):
+                        if avatar_url:
+                            ui.image(avatar_url).classes("h-full w-full rounded-full object-cover")
+                        else:
+                            ui.icon("account_circle").classes("text-blue-700")
                     with ui.column().classes("gap-0 flex-1"):
                         ui.label(get_user_name()).classes("font-bold text-slate-900")
                         ui.label(role_labels.get(role, "Người dùng")).classes("text-sm text-slate-500")

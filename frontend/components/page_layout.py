@@ -34,8 +34,8 @@ def page_layout(current_route: str = "", title: str = "Rescue24"):
             yield
             
     # 4. Footer
-    with ui.footer().classes("bg-surface border-t border-surface-variant py-6 mt-auto"):
-        with ui.row().classes("w-full max-w-7xl mx-auto px-6 justify-between items-center"):
-            ui.label("© 2026 Roadside Assistance System").classes("text-sm text-on-surface-variant")
-            with ui.row().classes("gap-6"):
-                ui.label("Hotline: 1900 2424").classes("text-sm font-bold text-primary")
+    with ui.footer().classes("bg-surface border-t border-surface-variant py-2 mt-auto"):
+        with ui.row().classes("w-full max-w-7xl mx-auto px-5 justify-between items-center"):
+            ui.label("© 2026 Roadside Assistance System").classes("text-xs text-on-surface-variant")
+            with ui.row().classes("gap-4"):
+                ui.label("Hotline: 1900 2424").classes("text-xs font-bold text-primary")

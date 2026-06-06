@@ -73,6 +73,7 @@ def _migrate_sqlite_columns() -> None:
     migrations = [
         ("notifications", "notification_type", "VARCHAR(50) DEFAULT 'SYSTEM'"),
         ("rescue_companies", "representative_name", "VARCHAR(100)"),
+        ("users", "avatar_url", "VARCHAR(500)"),
         ("users", "suspend_reason", "VARCHAR(500)"),
         ("rescue_companies", "suspend_reason", "TEXT"),
     ]

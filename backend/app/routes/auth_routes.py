@@ -103,7 +103,8 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)) -> dict:
                 "id": user.id,
                 "username": user.username,
                 "full_name": user.full_name,
-                "role": user.role.value
+                "role": user.role.value,
+                "avatar_url": user.avatar_url,
             }
         },
         message="Login successful"
