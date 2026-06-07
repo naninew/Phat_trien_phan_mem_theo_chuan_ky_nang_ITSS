@@ -494,6 +494,11 @@ def delete_my_vehicle(
     current_user: dict = Depends(get_current_user_from_token),
 ):
     """Delete customer vehicle."""
+    if rescue_svc.customer_vehicle_has_unfinished_requests(db, current_user["user_id"], vehicle_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete vehicle with unfinished rescue requests",
+        )
     ok = rescue_svc.delete_customer_vehicle(db, current_user["user_id"], vehicle_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Vehicle not found or not owned by you")

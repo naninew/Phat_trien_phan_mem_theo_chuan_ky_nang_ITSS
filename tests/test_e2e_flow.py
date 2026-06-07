@@ -85,6 +85,9 @@ def test_full_rescue_lifecycle():
     assert res.status_code == 200
     req_id = res.json()["data"]["id"]
 
+    res = client.delete(f"/api/v1/rescue/customer/vehicles/{v_id}", headers={"Authorization": f"Bearer {cust_token}"})
+    assert res.status_code == 400
+
     # 6. Company accepts Request
     res = client.put(f"/api/v1/rescue/requests/{req_id}/accept?eta_minutes=20", headers={"Authorization": f"Bearer {comp_token}"})
     assert res.status_code == 200

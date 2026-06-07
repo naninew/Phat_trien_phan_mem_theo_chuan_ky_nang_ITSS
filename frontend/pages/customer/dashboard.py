@@ -3,6 +3,7 @@ Customer Dashboard – Professional UI Version
 """
 from nicegui import ui
 import httpx
+import math
 from core.auth import get_access_token, require_role
 from core.config import BACKEND_URL
 from components.page_layout import page_layout
@@ -83,9 +84,6 @@ def create_customer_dashboard():
                     location_label.text = user_location_text
                     location_label.update()
 
-                # 3. update map marker
-                m.marker(latlng=(user_lat, user_lng))
-
                 return user_lat, user_lng
 
             except Exception as e:
@@ -94,6 +92,37 @@ def create_customer_dashboard():
 
         all_companies = []
         sort_by = 'distance'
+
+        def _distance_km(lat1, lng1, lat2, lng2):
+            radius_km = 6371.0
+            dlat = math.radians(lat2 - lat1)
+            dlng = math.radians(lng2 - lng1)
+            a = (
+                math.sin(dlat / 2) ** 2
+                + math.cos(math.radians(lat1))
+                * math.cos(math.radians(lat2))
+                * math.sin(dlng / 2) ** 2
+            )
+            return radius_km * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+        def _format_distance(value):
+            if value is None:
+                return "--"
+            if value < 10:
+                return f"{value:.1f}"
+            return f"{value:.0f}"
+
+        def _update_company_distances():
+            for company in all_companies:
+                c_lat = company.get('latitude')
+                c_lng = company.get('longitude')
+                if c_lat is None or c_lng is None:
+                    company['distance_km'] = None
+                    continue
+                company['distance_km'] = round(
+                    _distance_km(user_lat, user_lng, float(c_lat), float(c_lng)),
+                    1,
+                )
 
         # =====================================================
         # COMPANY CARD
@@ -178,7 +207,7 @@ def create_customer_dashboard():
                     """):
 
                         ui.label(
-                            f"{c.get('distance_km', '??')} km"
+                            f"{_format_distance(c.get('distance_km'))} km"
                         ).classes("""
                             text-primary
                             font-bold
@@ -203,7 +232,13 @@ def create_customer_dashboard():
 
             sorted_list = all_companies
 
-            if sort_by == 'rating':
+            if sort_by == 'distance':
+                sorted_list = sorted(
+                    all_companies,
+                    key=lambda x: x.get('distance_km') if x.get('distance_km') is not None else float('inf')
+                )
+
+            elif sort_by == 'rating':
 
                 sorted_list = sorted(
                     all_companies,
@@ -250,14 +285,23 @@ def create_customer_dashboard():
             )
             user_lat, user_lng = await _update_user_location()
             user_location_text = await get_location_text(user_lat, user_lng)
-             # User marker
-            user_marker = m.marker(
-                latlng=(user_lat, user_lng)
-            )
+            _update_company_distances()
+            _render_companies()
 
+            user_marker = m.marker(latlng=(user_lat, user_lng))
+            user_marker.run_method(
+                'bindTooltip',
+                'Vị trí của bạn',
+                {
+                    'permanent': True,
+                    'direction': 'top',
+                    'offset': [0, -35],
+                    'className': 'user-location-tooltip',
+                },
+            )
             user_marker.run_method(
                 'bindPopup',
-                'Vị trí của bạn'
+                '<div style="font-weight:700;color:#2563eb;">Vị trí hiện tại của bạn</div>',
             )
 
     # Company markers
@@ -341,7 +385,6 @@ def create_customer_dashboard():
 
                         all_companies = response.json()['data']
 
-                        _render_companies()
                         await _update_map()
 
                     else:
@@ -372,6 +415,23 @@ def create_customer_dashboard():
             sort_by = value
 
             _render_companies()
+
+        ui.add_head_html("""
+        <style>
+            .user-location-tooltip {
+                background: #ffffff;
+                border: 2px solid #2563eb;
+                border-radius: 999px;
+                box-shadow: 0 8px 18px rgba(37, 99, 235, 0.2);
+                color: #1d4ed8;
+                font-weight: 800;
+                padding: 6px 12px;
+            }
+            .user-location-tooltip::before {
+                border-top-color: #2563eb;
+            }
+        </style>
+        """)
 
         # =====================================================
         # PAGE
@@ -504,7 +564,7 @@ def create_customer_dashboard():
                                 icon='my_location',
                                 on_click=lambda: (
                                     m.set_center(
-                                        (21.0285, 105.8542)
+                                        (user_lat, user_lng)
                                     ),
                                     m.set_zoom(13)
                                 )

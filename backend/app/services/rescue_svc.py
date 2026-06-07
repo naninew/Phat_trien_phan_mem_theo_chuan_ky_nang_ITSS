@@ -30,6 +30,11 @@ from app.schemas.rescue import (
 EARTH_RADIUS_KM = 6371.0
 PRICE_PER_KM = 10_000.0      # VND per km
 AVG_SPEED_KMH = 40.0         # km/h for ETA estimate
+FINAL_REQUEST_STATUSES = (
+    RequestStatus.COMPLETED.value,
+    RequestStatus.CANCELLED.value,
+    RequestStatus.REJECTED.value,
+)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -673,9 +678,18 @@ def update_customer_vehicle(db: Session, customer_id: int, vehicle_id: int, vehi
     db.refresh(v)
     return v
 
+def customer_vehicle_has_unfinished_requests(db: Session, customer_id: int, vehicle_id: int) -> bool:
+    return db.query(RescueRequest.id).filter(
+        RescueRequest.user_id == customer_id,
+        RescueRequest.vehicle_id == vehicle_id,
+        RescueRequest.status.notin_(FINAL_REQUEST_STATUSES),
+    ).first() is not None
+
 def delete_customer_vehicle(db: Session, customer_id: int, vehicle_id: int) -> bool:
     v = db.query(Vehicle).filter(Vehicle.id == vehicle_id, Vehicle.customer_id == customer_id).first()
     if not v:
+        return False
+    if customer_vehicle_has_unfinished_requests(db, customer_id, vehicle_id):
         return False
     db.delete(v)
     db.commit()

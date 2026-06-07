@@ -979,6 +979,11 @@ def delete_customer_vehicle(
     current_user: dict = Depends(auth_svc.get_current_user_from_token),
 ):
     """Xóa xe cá nhân."""
+    if rescue_svc.customer_vehicle_has_unfinished_requests(db, current_user["user_id"], vehicle_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Không thể xóa xe đang có yêu cầu cứu hộ chưa hoàn thành",
+        )
     ok = rescue_svc.delete_customer_vehicle(db, current_user["user_id"], vehicle_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Không tìm thấy xe để xóa")
