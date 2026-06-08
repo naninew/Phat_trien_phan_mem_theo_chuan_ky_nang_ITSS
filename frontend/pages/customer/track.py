@@ -276,10 +276,8 @@ def create_track_page() -> None:
                         "w-full items-end gap-2 mb-3" + (" justify-end" if is_sent else "")
                     ):
                         if not is_sent:
-                            ui.avatar(
-                                text=sender_name[0].upper() if sender_name else "?",
-                                size="sm"
-                            ).classes("text-xs bg-blue-500/20 text-blue-600")
+                            with ui.avatar(size="sm").classes("text-xs bg-blue-500/20 text-blue-600"):
+                                ui.label(sender_name[0].upper() if sender_name else "?")
 
                         with ui.column().classes("gap-1 max-w-xs" + (" items-end" if is_sent else "")):
                             with ui.row().classes("gap-2 px-3" + (" flex-row-reverse" if is_sent else "")):
@@ -321,13 +319,10 @@ def create_track_page() -> None:
 
             # Gộp tin tạm optimistic với tin thật trả về từ server.
             for m in chat_messages_list:
-                if (
-                    m["message"] == message
-                    and m.get("id") is None
-                    and m.get("sent") == is_me
-                ):
+                if m["message"] == message and m.get("id") is None:
                     if msg_id is not None:
                         m["id"] = msg_id
+                        m["sent"] = is_me
                         m["sender_name"] = sender_name
                         if stamp:
                             m["stamp"] = stamp

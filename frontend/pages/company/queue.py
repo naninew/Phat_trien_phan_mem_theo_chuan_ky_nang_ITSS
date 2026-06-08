@@ -107,12 +107,10 @@ def create_queue_page():
         # CHAT PANEL (embedded in dialog)
         # ──────────────────────────────────────────────────────────────────────
 
-        async def _open_chat_dialog(req_id: int, customer_name: str):
-            """Mở dialog chat với customer của request req_id."""
-
-            # Capture UI context ngay lập tức
-            from nicegui import context
-            ui_context = context.client
+        async def _open_chat_dialog(r: Dict[str, Any], ui_context):
+            """Mở dialog chat với customer của request r."""
+            req_id = r['id']
+            customer_name = r.get('customer_name', 'Khách hàng')
 
             # Nếu đã có dialog cho request này, không mở thêm
             chat_messages: List[Dict] = []
@@ -124,10 +122,11 @@ def create_queue_page():
                     for m in chat_messages:
                         if m.get("id") == msg_id:
                             return
-                    # Gán ID thực tế từ server cho tin nhắn tạm thời (optimistic update) nếu trùng nội dung và người gửi
+                    # Gán ID thực tế từ server cho tin nhắn tạm thời (optimistic update) nếu trùng nội dung
                     for m in chat_messages:
-                        if m.get("id") is None and m["message"] == message and m["sent"] == is_me:
+                        if m.get("id") is None and m["message"] == message:
                             m["id"] = msg_id
+                            m["sent"] = is_me
                             if stamp:
                                 m["stamp"] = stamp
                             return
@@ -140,41 +139,50 @@ def create_queue_page():
                     "stamp": stamp,
                 })
 
-            with ui.dialog() as chat_dlg, ui.card().classes(
-                "w-[520px] rounded-3xl p-0 overflow-hidden"
-            ):
-                # Header
-                with ui.row().classes(
-                    "w-full items-center justify-between px-6 py-4 "
-                    "bg-primary text-white"
+            with ui_context:
+                with ui.dialog() as chat_dlg, ui.card().classes(
+                    "w-[520px] rounded-3xl p-0 overflow-hidden"
                 ):
-                    with ui.row().classes("items-center gap-3"):
-                        ui.icon("chat_bubble").classes("text-white")
-                        with ui.column().classes("gap-0"):
-                            ui.label(f"Chat – Yêu cầu #{req_id}").classes(
-                                "font-bold text-lg"
-                            )
-                            ws_status_lbl = ui.label("Đang kết nối...").classes(
-                                "text-xs opacity-80"
-                            )
+                    # Header
+                    with ui.row().classes(
+                        "w-full items-center justify-between px-6 py-4 "
+                        "bg-primary text-white"
+                    ):
+                        with ui.row().classes("items-center gap-3"):
+                            ui.icon("chat_bubble").classes("text-white")
+                            with ui.column().classes("gap-0"):
+                                ui.label(f"Chat – Yêu cầu #{req_id}").classes(
+                                    "font-bold text-lg"
+                                )
+                                ws_status_lbl = ui.label("Đang kết nối...").classes(
+                                    "text-xs opacity-80"
+                                )
 
-                    ui.button(icon="close", on_click=chat_dlg.close).props(
-                        "flat round dense"
-                    ).classes("text-white")
+                        ui.button(icon="close", on_click=chat_dlg.close).props(
+                            "flat round dense"
+                        ).classes("text-white")
 
-                # Messages area
-                msg_scroll = ui.scroll_area().classes("w-full px-4 pt-4").style(
-                    "height: 380px"
-                ).props("visible-axis=vertical")
+                    # Request details box
+                    with ui.column().classes("w-full bg-blue-50/50 p-4 border-b gap-1"):
+                        with ui.row().classes("items-center gap-2"):
+                            ui.icon("build", size="xs").classes("text-primary")
+                            ui.label(f"Dịch vụ: {r.get('service_name', 'Cứu hộ')}").classes("font-bold text-sm text-primary")
+                        ui.label(f"Loại sự cố: {r.get('incident_type', 'N/A')}").classes("text-xs font-semibold")
+                        ui.label(f"Chi tiết: {r.get('description', 'N/A')}").classes("text-xs opacity-85")
 
-                # Input row
-                with ui.row().classes("w-full items-center gap-3 px-4 py-4 border-t"):
-                    chat_inp = ui.input(
-                        placeholder="Nhập tin nhắn..."
-                    ).classes("flex-1").props("outlined rounded dense")
-                    chat_send_btn = ui.button(icon="send").props(
-                        "round unelevated color=primary"
-                    )
+                    # Messages area
+                    msg_scroll = ui.scroll_area().classes("w-full px-4 pt-4").style(
+                        "height: 380px"
+                    ).props("visible-axis=vertical")
+
+                    # Input row
+                    with ui.row().classes("w-full items-center gap-3 px-4 py-4 border-t"):
+                        chat_inp = ui.input(
+                            placeholder="Nhập tin nhắn..."
+                        ).classes("flex-1").props("outlined rounded dense")
+                        chat_send_btn = ui.button(icon="send").props(
+                            "round unelevated color=primary"
+                        )
 
             # ── Refreshable message renderer ─────────────────────────────────
 
@@ -191,9 +199,8 @@ def create_queue_page():
                         "w-full items-end gap-2 mb-2" + (" justify-end" if is_me else "")
                     ):
                         if not is_me:
-                            ui.avatar(
-                                text=name[0].upper() if name else "?", size="sm"
-                            ).classes("text-xs bg-orange-100 text-orange-600")
+                            with ui.avatar(size="sm").classes("text-xs bg-orange-100 text-orange-600"):
+                                ui.label(name[0].upper() if name else "?")
 
                         with ui.column().classes(
                             "gap-0.5 max-w-[280px]" + (" items-end" if is_me else "")
@@ -401,6 +408,15 @@ def create_queue_page():
                                 ui.icon("phone", size="sm")
                                 ui.label(r.get('customer_phone', 'N/A'))
 
+                        if r.get('incident_type'):
+                            with ui.row().classes("items-center gap-2 mt-2"):
+                                ui.icon("error_outline", size="sm").classes("text-warning")
+                                ui.label(f"Sự cố: {r['incident_type']}").classes("font-bold text-sm text-warning")
+                        if r.get('description'):
+                            with ui.row().classes("items-start gap-2 mt-1"):
+                                ui.icon("description", size="sm").classes("opacity-60 mt-0.5")
+                                ui.label(f"Chi tiết: {r['description']}").classes("text-sm opacity-80 italic")
+
                     with ui.column().classes("items-end"):
                         ui.label("Vị trí yêu cầu:").classes(
                             "text-[10px] uppercase font-bold opacity-50"
@@ -434,8 +450,8 @@ def create_queue_page():
                             ui.button(
                                 "Chat",
                                 icon="chat_bubble_outline",
-                                on_click=lambda req_id=r['id'], cname=customer_name: (
-                                    asyncio.ensure_future(_open_chat_dialog(req_id, cname))
+                                on_click=lambda req=r: (
+                                    asyncio.ensure_future(_open_chat_dialog(req, ui.context.client))
                                 ),
                             ).props("flat color=primary").classes("font-bold")
 
