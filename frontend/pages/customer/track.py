@@ -153,7 +153,7 @@ def create_track_page() -> None:
 
                     # MAP card
                     with ui.card().classes(
-                        "w-full rounded-[28px] shadow-2xl "
+                        "w-full rounded-[24px] shadow-lg "
                         "border border-gray-200 overflow-hidden p-0"
                     ):
                         with ui.column().classes("w-full gap-0"):
@@ -161,14 +161,14 @@ def create_track_page() -> None:
                             # map header
                             with ui.row().classes(
                                 "w-full items-center justify-between "
-                                "px-6 py-4 border-b"
+                                "px-5 py-3 border-b"
                             ):
                                 with ui.column().classes("gap-0"):
                                     ui.label("Theo Dõi Vị Trí").classes(
-                                        "text-xl font-bold"
+                                        "text-base font-bold"
                                     )
                                     ui.label("Realtime GPS tracking").classes(
-                                        "text-sm opacity-60"
+                                        "text-xs opacity-60"
                                     )
 
                                 with ui.row().classes("gap-3 items-center"):
@@ -182,7 +182,7 @@ def create_track_page() -> None:
                             # leaflet map
                             map_widget = ui.leaflet(
                                 center=(21.0285, 105.8542), zoom=13
-                            ).classes("w-full h-[520px] z-0")
+                            ).classes("w-full h-[300px] z-0")
 
                             map_widget.tile_layer(
                                 url_template=(
@@ -214,7 +214,7 @@ def create_track_page() -> None:
                         # Chat messages container
                         chat_messages_container = ui.scroll_area().classes(
                             "w-full"
-                        ).style("height: 340px").props("visible-axis=vertical")
+                        ).style("height: 520px").props("visible-axis=vertical")
 
                         # Chat input area
                         with ui.row().classes("w-full gap-3 mt-4"):
@@ -260,6 +260,7 @@ def create_track_page() -> None:
             "sending": False,
             "next_temp_id": 1,
             "locked": False,
+            "confirmed_outgoing_ids": set(),
         }
 
         @ui.refreshable
@@ -311,6 +312,8 @@ def create_track_page() -> None:
                 for m in chat_messages_list:
                     if m.get("id") == msg_id:
                         return
+                if is_me and msg_id in chat_state["confirmed_outgoing_ids"]:
+                    return
 
             if temp_id is not None:
                 for m in chat_messages_list:
@@ -342,6 +345,34 @@ def create_track_page() -> None:
             chat_messages_list[:] = [
                 m for m in chat_messages_list if m.get("temp_id") != temp_id
             ]
+
+        def _confirm_temp_message(
+            temp_id: str,
+            message: str,
+            sender_name: str,
+            is_me: bool,
+            stamp: str,
+            msg_id: int = None,
+        ) -> None:
+            if msg_id is not None:
+                chat_state["confirmed_outgoing_ids"].add(msg_id)
+                for m in chat_messages_list:
+                    if m.get("id") == msg_id and m.get("temp_id") != temp_id:
+                        _remove_temp_message(temp_id)
+                        return
+
+            for m in chat_messages_list:
+                if m.get("temp_id") == temp_id:
+                    m["id"] = msg_id
+                    m["message"] = message
+                    m["sent"] = is_me
+                    m["sender_name"] = "Bạn" if is_me else sender_name
+                    if stamp:
+                        m["stamp"] = stamp
+                    m.pop("temp_id", None)
+                    return
+
+            _append_message(message, sender_name, is_me, stamp, msg_id=msg_id)
 
         # ────────────────────────────────────────────────────────────────
         # WEBSOCKET CLIENT
@@ -495,7 +526,8 @@ def create_track_page() -> None:
                         ui.notify("Gửi tin nhắn thất bại", type="negative")
                     return
 
-                _append_message(
+                _confirm_temp_message(
+                    temp_id=temp_id,
                     message=result.get("content", val),
                     sender_name="Bạn",
                     is_me=True,

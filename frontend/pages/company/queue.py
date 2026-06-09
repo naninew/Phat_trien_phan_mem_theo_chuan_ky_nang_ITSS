@@ -82,17 +82,29 @@ def create_queue_page():
 
         # ── Logic ─────────────────────────────────────────────────────────────
 
+        queue_snapshot = None
+
         async def _load_data(auto_refresh: bool = False):
+            nonlocal queue_snapshot
             if auto_refresh and dialog_open:
                 return
 
-            refresh_btn.props("loading")
-            queue_container.clear()
+            if not auto_refresh:
+                refresh_btn.props("loading")
             try:
                 queue = await get_company_queue(status_filter.value)
                 vehicles = await get_my_vehicles()
                 staff = await get_company_staff()
+                new_snapshot = json.dumps(
+                    {"queue": queue, "vehicles": vehicles, "staff": staff},
+                    sort_keys=True,
+                    default=str,
+                )
+                if auto_refresh and new_snapshot == queue_snapshot:
+                    return
 
+                queue_snapshot = new_snapshot
+                queue_container.clear()
                 with queue_container:
                     if not queue:
                         ui.label("Hàng đợi trống.").classes("italic opacity-50 py-20 self-center")
@@ -101,7 +113,8 @@ def create_queue_page():
             except Exception as e:
                 ui.notify(f"Lỗi: {e}", type="negative")
             finally:
-                refresh_btn.props(remove="loading")
+                if not auto_refresh:
+                    refresh_btn.props(remove="loading")
 
         # ──────────────────────────────────────────────────────────────────────
         # CHAT PANEL (embedded in dialog)
@@ -114,30 +127,88 @@ def create_queue_page():
 
             # Nếu đã có dialog cho request này, không mở thêm
             chat_messages: List[Dict] = []
+            chat_state = {
+                "sending": False,
+                "next_temp_id": 1,
+                "confirmed_outgoing_ids": set(),
+            }
 
-            def _append_message(message: str, sender_name: str, is_me: bool, stamp: str, msg_id: int = None):
+            def _append_message(
+                message: str,
+                sender_name: str,
+                is_me: bool,
+                stamp: str,
+                msg_id: int = None,
+                temp_id: str = None,
+            ):
                 """Thêm tin nhắn vào danh sách (tránh trùng lặp)."""
                 if msg_id is not None:
                     # Tránh trùng lặp nếu đã tồn tại ID này
                     for m in chat_messages:
                         if m.get("id") == msg_id:
                             return
-                    # Gán ID thực tế từ server cho tin nhắn tạm thời (optimistic update) nếu trùng nội dung
+                    if is_me and msg_id in chat_state["confirmed_outgoing_ids"]:
+                        return
+
+                if temp_id is not None:
                     for m in chat_messages:
-                        if m.get("id") is None and m["message"] == message:
+                        if m.get("temp_id") == temp_id:
+                            return
+
+                # Gộp tin tạm optimistic với tin thật trả về từ REST/WebSocket.
+                # Nếu socket echo về sai phía, vẫn giữ bubble "Bạn" cho tin vừa gửi.
+                for m in chat_messages:
+                    if m["message"] == message and m.get("id") is None:
+                        if msg_id is not None:
                             m["id"] = msg_id
-                            m["sent"] = is_me
+                            m["sent"] = bool(m.get("sent")) or is_me
+                            m["sender_name"] = "Bạn" if m["sent"] else sender_name
                             if stamp:
                                 m["stamp"] = stamp
-                            return
+                            m.pop("temp_id", None)
+                        return
 
                 chat_messages.append({
                     "id": msg_id,
+                    "temp_id": temp_id,
                     "message": message,
                     "sent": is_me,
                     "sender_name": sender_name,
                     "stamp": stamp,
                 })
+
+            def _remove_temp_message(temp_id: str) -> None:
+                chat_messages[:] = [
+                    m for m in chat_messages if m.get("temp_id") != temp_id
+                ]
+
+            def _confirm_temp_message(
+                temp_id: str,
+                message: str,
+                sender_name: str,
+                is_me: bool,
+                stamp: str,
+                msg_id: int = None,
+            ) -> None:
+                if msg_id is not None:
+                    chat_state["confirmed_outgoing_ids"].add(msg_id)
+                    for m in chat_messages:
+                        if m.get("id") == msg_id and m.get("temp_id") != temp_id:
+                            _remove_temp_message(temp_id)
+                            return
+
+                for m in chat_messages:
+                    if m.get("temp_id") == temp_id:
+                        m["id"] = msg_id
+                        m["message"] = message
+                        m["sent"] = is_me
+                        m["sender_name"] = "Bạn" if is_me else sender_name
+                        if stamp:
+                            m["stamp"] = stamp
+                        m.pop("temp_id", None)
+                        return
+
+                _append_message(message, sender_name, is_me, stamp, msg_id=msg_id)
 
             with ui_context:
                 with ui.dialog() as chat_dlg, ui.card().classes(
@@ -229,9 +300,17 @@ def create_queue_page():
             # ── Send handler ─────────────────────────────────────────────────
 
             async def _do_send():
+                if chat_state["sending"]:
+                    return
+
                 val = chat_inp.value.strip()
                 if not val:
                     return
+
+                chat_state["sending"] = True
+                chat_send_btn.disable()
+                temp_id = f"pending-{chat_state['next_temp_id']}"
+                chat_state["next_temp_id"] += 1
 
                 # Optimistic
                 _append_message(
@@ -239,6 +318,7 @@ def create_queue_page():
                     sender_name="Bạn",
                     is_me=True,
                     stamp=datetime.now().strftime("%H:%M"),
+                    temp_id=temp_id,
                 )
                 chat_inp.value = ""
                 await _render_msgs.refresh()
@@ -249,15 +329,29 @@ def create_queue_page():
                 try:
                     result = await send_chat_message(req_id, val)
                     if not result:
-                        chat_messages.pop()
+                        _remove_temp_message(temp_id)
                         await _render_msgs.refresh()
                         with ui_context:
                             ui.notify("Gửi thất bại", type="negative")
+                        return
+
+                    _confirm_temp_message(
+                        temp_id=temp_id,
+                        message=result.get("content", val),
+                        sender_name="Bạn",
+                        is_me=True,
+                        stamp=datetime.now().strftime("%H:%M"),
+                        msg_id=result.get("id"),
+                    )
+                    await _render_msgs.refresh()
                 except Exception as e:
-                    chat_messages.pop()
+                    _remove_temp_message(temp_id)
                     await _render_msgs.refresh()
                     with ui_context:
                         ui.notify(f"Lỗi: {e}", type="negative")
+                finally:
+                    chat_state["sending"] = False
+                    chat_send_btn.enable()
 
             chat_send_btn.on_click(lambda: asyncio.ensure_future(_do_send()))
             chat_inp.on("keydown.enter", lambda: asyncio.ensure_future(_do_send()))
@@ -301,8 +395,7 @@ def create_queue_page():
                                             msg_id=m.get("id"),
                                         )
                                     with ui_context:
-                                        with msg_scroll:
-                                            await _render_msgs()
+                                        await _render_msgs.refresh()
                                         await _scroll_bottom()
                                 elif t == "message":
                                     _append_message(

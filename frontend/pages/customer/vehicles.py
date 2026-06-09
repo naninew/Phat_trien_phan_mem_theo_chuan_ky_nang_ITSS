@@ -100,7 +100,10 @@ def create_vehicles_page():
 
                 stats_container = ui.row().classes("w-full gap-3 flex-wrap")
 
-                with ui.card().classes("w-full rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"):
+                with ui.card().classes(
+                    "w-full rounded-2xl border border-slate-100 bg-white p-4 shadow-sm "
+                    "transition-all hover:-translate-y-0.5 hover:border-blue-100 hover:shadow-md"
+                ):
                     with ui.row().classes("w-full items-center gap-3 flex-wrap"):
                         search_input = ui.input(
                             placeholder="Tìm theo biển số xe..."
@@ -143,24 +146,57 @@ def create_vehicles_page():
             stats_container.clear()
             vehicles = state["vehicles"]
             stat_items = [
-                ("Tổng số xe", len(vehicles), "directions_car", "text-blue-600", "bg-blue-50"),
-                ("Xe xăng", sum(1 for v in vehicles if v.get("fuel_type") == "Xăng"), "local_gas_station", "text-blue-600", "bg-blue-50"),
-                ("Xe điện", sum(1 for v in vehicles if v.get("fuel_type") == "Điện"), "electric_car", "text-emerald-600", "bg-emerald-50"),
-                ("Xe hybrid", sum(1 for v in vehicles if v.get("fuel_type") == "Hybrid"), "energy_savings_leaf", "text-amber-600", "bg-amber-50"),
+                (
+                    "Tổng số xe",
+                    len(vehicles),
+                    "directions_car",
+                    "text-blue-600",
+                    "bg-blue-50",
+                    "border-blue-100",
+                    "bg-blue-100",
+                ),
+                (
+                    "Xe xăng",
+                    sum(1 for v in vehicles if v.get("fuel_type") == "Xăng"),
+                    "local_gas_station",
+                    "text-blue-600",
+                    "bg-sky-50",
+                    "border-sky-100",
+                    "bg-sky-100",
+                ),
+                (
+                    "Xe điện",
+                    sum(1 for v in vehicles if v.get("fuel_type") == "Điện"),
+                    "electric_car",
+                    "text-emerald-600",
+                    "bg-emerald-50",
+                    "border-emerald-100",
+                    "bg-emerald-100",
+                ),
+                (
+                    "Xe hybrid",
+                    sum(1 for v in vehicles if v.get("fuel_type") == "Hybrid"),
+                    "bolt",
+                    "text-amber-600",
+                    "bg-amber-50",
+                    "border-amber-100",
+                    "bg-amber-100",
+                ),
             ]
             with stats_container:
-                for label, value, icon, color, bg in stat_items:
+                for label, value, icon, color, card_bg, border, icon_bg in stat_items:
                     with ui.card().classes(
-                        "flex-1 min-w-[160px] rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
+                        f"flex-1 min-w-[180px] rounded-2xl border {border} {card_bg} p-4 shadow-sm "
+                        "transition-all hover:-translate-y-0.5 hover:shadow-md"
                     ):
-                        with ui.row().classes("items-center justify-between gap-3"):
-                            with ui.column().classes("gap-0"):
+                        with ui.row().classes("w-full items-center justify-between gap-4"):
+                            with ui.column().classes("gap-3"):
                                 ui.label(label).classes("text-xs font-bold uppercase text-slate-400")
-                                ui.label(str(value)).classes("text-2xl font-bold text-slate-900")
-                            with ui.element("div").classes(
-                                f"h-10 w-10 rounded-2xl {bg} flex items-center justify-center"
-                            ):
-                                ui.icon(icon, size="1.25rem").classes(color)
+                                with ui.element("div").classes(
+                                    f"h-11 w-11 rounded-2xl {icon_bg} flex items-center justify-center"
+                                ):
+                                    ui.icon(icon, size="1.35rem").classes(color)
+                            ui.label(str(value)).classes("text-3xl font-black text-slate-900")
 
         def render_empty(filtered: bool = False):
             with vehicles_container:
@@ -211,7 +247,7 @@ def create_vehicles_page():
             with ui.card().classes(
                 "w-full md:w-[calc(50%-0.5rem)] xl:w-[calc(33.333%-0.75rem)] "
                 "rounded-2xl border border-slate-100 bg-white p-4 shadow-sm "
-                "transition-all hover:border-blue-100 hover:shadow-md"
+                "transition-all hover:-translate-y-0.5 hover:border-blue-100 hover:shadow-lg"
             ):
                 with ui.column().classes("w-full gap-4"):
                     with ui.row().classes("w-full items-start justify-between gap-3"):

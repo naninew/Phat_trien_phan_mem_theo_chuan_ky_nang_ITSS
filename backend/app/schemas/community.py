@@ -10,6 +10,7 @@ class ReplyResponse(BaseModel):
     post_id: int
     user_id: int
     user_name: str
+    user_avatar_url: Optional[str] = None
     content: str
     is_helpful: bool
     created_at: datetime
@@ -32,6 +33,7 @@ class PostResponse(BaseModel):
     id: int
     user_id: int
     user_name: str
+    user_avatar_url: Optional[str] = None
     title: str
     content: str
     images: Optional[str]

@@ -218,6 +218,13 @@ def create_requests_page():
             service_filter.options = {"all": "Tất cả dịch vụ", **{name: name for name in names}}
             service_filter.update()
 
+        def update_status_options():
+            status_filter.options = {
+                key: f"{label} ({tab_count(key)})" for key, label in STATUS_TABS
+            }
+            status_filter.value = state["status"]
+            status_filter.update()
+
         with page_layout("/customer/requests", title="Yêu Cầu Của Tôi"):
             with ui.column().classes("w-full gap-5"):
                 with ui.row().classes("w-full items-center justify-between gap-4"):
@@ -238,12 +245,22 @@ def create_requests_page():
 
                 stats_container = ui.row().classes("w-full gap-3 flex-wrap")
 
-                with ui.card().classes("w-full rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"):
+                with ui.card().classes(
+                    "w-full rounded-2xl border border-slate-100 bg-white p-4 shadow-sm "
+                    "transition-all hover:-translate-y-0.5 hover:border-blue-100 hover:shadow-md"
+                ):
                     with ui.row().classes("w-full items-center gap-3 flex-wrap"):
                         search_input = ui.input(
                             placeholder="Tìm theo mã yêu cầu, địa chỉ, đơn vị cứu hộ..."
                         ).classes("min-w-[280px] flex-1").props("outlined dense rounded clearable")
                         search_input.on("update:model-value", lambda: _set_search(search_input.value))
+
+                        status_filter = ui.select(
+                            options={"all": "Tất cả"},
+                            value="all",
+                            label="Trạng thái",
+                            on_change=lambda: _set_status(status_filter.value),
+                        ).classes("w-56").props("outlined dense rounded")
 
                         time_filter = ui.select(
                             options={
@@ -269,8 +286,6 @@ def create_requests_page():
                             on_click=lambda: _load_data(),
                         ).props("flat round color=primary")
 
-                    tabs_container = ui.row().classes("w-full gap-2 mt-4 overflow-x-auto no-wrap")
-
                 list_container = ui.column().classes("w-full gap-3")
 
         def _set_search(value):
@@ -288,48 +303,66 @@ def create_requests_page():
         def _render_stats():
             stats_container.clear()
             stat_items = [
-                ("Tất cả", len(state["all_requests"]), "article", "text-blue-600", "bg-blue-50"),
-                ("Chờ tiếp nhận", status_group_count("PENDING"), "schedule", "text-amber-600", "bg-amber-50"),
-                ("Đang xử lý", status_group_count(*ACTIVE_STATUSES), "bolt", "text-indigo-600", "bg-indigo-50"),
-                ("Hoàn thành", status_group_count("COMPLETED"), "check_circle", "text-emerald-600", "bg-emerald-50"),
-                ("Đã hủy", status_group_count("CANCELLED", "REJECTED"), "cancel", "text-slate-600", "bg-slate-100"),
+                (
+                    "Tất cả",
+                    len(state["all_requests"]),
+                    "article",
+                    "text-blue-600",
+                    "bg-blue-50",
+                    "border-blue-100",
+                    "bg-blue-100",
+                ),
+                (
+                    "Chờ tiếp nhận",
+                    status_group_count("PENDING"),
+                    "schedule",
+                    "text-amber-600",
+                    "bg-amber-50",
+                    "border-amber-100",
+                    "bg-amber-100",
+                ),
+                (
+                    "Đang xử lý",
+                    status_group_count(*ACTIVE_STATUSES),
+                    "bolt",
+                    "text-indigo-600",
+                    "bg-indigo-50",
+                    "border-indigo-100",
+                    "bg-indigo-100",
+                ),
+                (
+                    "Hoàn thành",
+                    status_group_count("COMPLETED"),
+                    "check_circle",
+                    "text-emerald-600",
+                    "bg-emerald-50",
+                    "border-emerald-100",
+                    "bg-emerald-100",
+                ),
+                (
+                    "Đã hủy",
+                    status_group_count("CANCELLED", "REJECTED"),
+                    "cancel",
+                    "text-slate-600",
+                    "bg-slate-100",
+                    "border-slate-200",
+                    "bg-white/70",
+                ),
             ]
             with stats_container:
-                for label, value, icon, icon_color, bg in stat_items:
+                for label, value, icon, icon_color, card_bg, border, icon_bg in stat_items:
                     with ui.card().classes(
-                        "flex-1 min-w-[160px] rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
+                        f"flex-1 min-w-[180px] rounded-2xl border {border} {card_bg} p-4 shadow-sm "
+                        "transition-all hover:-translate-y-0.5 hover:shadow-md"
                     ):
-                        with ui.row().classes("items-center justify-between gap-3"):
-                            with ui.column().classes("gap-0"):
+                        with ui.row().classes("w-full items-center justify-between gap-4"):
+                            with ui.column().classes("gap-3"):
                                 ui.label(label).classes("text-xs font-bold uppercase text-slate-400")
-                                ui.label(str(value)).classes("text-2xl font-bold text-slate-900")
-                            with ui.element("div").classes(
-                                f"h-10 w-10 rounded-2xl {bg} flex items-center justify-center"
-                            ):
-                                ui.icon(icon, size="1.25rem").classes(icon_color)
-
-        def _render_tabs():
-            tabs_container.clear()
-            with tabs_container:
-                for key, label in STATUS_TABS:
-                    active = state["status"] == key
-                    count = tab_count(key)
-                    classes = (
-                        "bg-blue-600 text-white shadow-sm"
-                        if active
-                        else "bg-white text-slate-600 border border-slate-200 hover:bg-blue-50"
-                    )
-                    badge_classes = (
-                        "bg-white/20 text-white"
-                        if active
-                        else "bg-slate-100 text-slate-600"
-                    )
-                    with ui.row().classes(
-                        f"items-center gap-2 rounded-full px-4 py-2 text-sm font-bold "
-                        f"whitespace-nowrap cursor-pointer transition-all {classes}"
-                    ).on("click", lambda key=key: _set_status(key)):
-                        ui.label(label)
-                        ui.badge(str(count)).classes(f"rounded-full px-2 {badge_classes}")
+                                with ui.element("div").classes(
+                                    f"h-11 w-11 rounded-2xl {icon_bg} flex items-center justify-center"
+                                ):
+                                    ui.icon(icon, size="1.35rem").classes(icon_color)
+                            ui.label(str(value)).classes("text-3xl font-black text-slate-900")
 
         def _render_empty():
             with list_container:
@@ -352,7 +385,7 @@ def create_requests_page():
 
         def _render():
             _render_stats()
-            _render_tabs()
+            update_status_options()
             list_container.clear()
             reqs = filtered_requests()
             if not reqs:
@@ -449,7 +482,7 @@ def create_requests_page():
 
             with ui.card().classes(
                 "w-full overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm "
-                "transition-all hover:border-blue-100 hover:shadow-md"
+                "transition-all hover:-translate-y-0.5 hover:border-blue-100 hover:shadow-lg"
             ):
                 with ui.row().classes("w-full no-wrap"):
                     ui.element("div").classes(f"w-1.5 {config['bar']}")

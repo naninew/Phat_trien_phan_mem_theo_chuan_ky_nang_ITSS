@@ -58,6 +58,9 @@ def create_find_rescue_page():
             'companies': []
         }
 
+        def vehicle_fuel_label(vehicle: Dict[str, Any]) -> str:
+            return vehicle.get('fuel_type') or vehicle.get('fuel') or 'Chưa cập nhật'
+
         with page_layout("/customer/find-rescue", title="Yêu Cầu Cứu Hộ"):
             
             with ui.stepper().classes(
@@ -99,11 +102,16 @@ def create_find_rescue_page():
                                                 if is_selected:
                                                     ui.icon('check_circle', color='primary').classes('text-2xl')
                                             with ui.row().classes('w-full text-xs text-gray-500 gap-4'):
-                                                ui.label(f"🔧 {v.get('vehicle_type', 'N/A')}")
-                                                ui.label(f"📅 {v.get('year', 'N/A')}")
+                                                with ui.row().classes('items-center gap-1'):
+                                                    ui.icon('local_gas_station', size='1rem').classes('text-blue-500')
+                                                    ui.label(vehicle_fuel_label(v))
+                                                with ui.row().classes('items-center gap-1'):
+                                                    ui.icon('event', size='1rem').classes('text-slate-500')
+                                                    ui.label(str(v.get('year') or 'Chưa cập nhật'))
 
                         def select_vehicle(v):
                             state['selected_vehicle'] = v
+                            update_selected_vehicle_summary()
                             ui.notify(f"✓ Đã chọn xe: {v['license_plate']}", type='positive')
                             stepper.next()
 
@@ -247,13 +255,13 @@ def create_find_rescue_page():
                                                 'text-xs font-bold uppercase text-slate-400'
                                             )
                                             selected_vehicle = state.get('selected_vehicle') or {}
-                                            ui.label(
+                                            summary_vehicle_plate = ui.label(
                                                 selected_vehicle.get('license_plate', 'Chưa chọn xe')
                                             ).classes('text-sm font-bold text-slate-800')
-                                            if selected_vehicle:
-                                                ui.label(
-                                                    f"{selected_vehicle.get('brand', '')} {selected_vehicle.get('model', '')}".strip()
-                                                ).classes('text-xs text-slate-500')
+                                            summary_vehicle_detail = ui.label(
+                                                f"{selected_vehicle.get('brand', '')} {selected_vehicle.get('model', '')}".strip()
+                                                if selected_vehicle else ''
+                                            ).classes('text-xs text-slate-500')
 
                                     with ui.row().classes('w-full items-start gap-3'):
                                         ui.icon('place', size='1.2rem').classes('text-emerald-600 mt-0.5')
@@ -290,6 +298,19 @@ def create_find_rescue_page():
                                         service_mapping.get(svc_select.value, 'Chưa chọn')
                                     )
                                     summary_issue.set_text(issue_input.value or 'Chưa nhập mô tả')
+
+                                def update_selected_vehicle_summary():
+                                    selected_vehicle = state.get('selected_vehicle') or {}
+                                    if not selected_vehicle:
+                                        summary_vehicle_plate.set_text('Chưa chọn xe')
+                                        summary_vehicle_detail.set_text('')
+                                        return
+                                    summary_vehicle_plate.set_text(
+                                        selected_vehicle.get('license_plate') or 'Chưa có biển số'
+                                    )
+                                    summary_vehicle_detail.set_text(
+                                        f"{selected_vehicle.get('brand', '')} {selected_vehicle.get('model', '')}".strip()
+                                    )
 
                                 svc_select.on('update:model-value', lambda: update_step2_summary())
                                 issue_input.on('update:model-value', lambda: update_step2_summary())
@@ -363,36 +384,47 @@ def create_find_rescue_page():
         async def _sync_user_marker(map_id, lat, lng):
             await ui.run_javascript(f"""
                 (function() {{
-                    var el = getElement({map_id});
-                    if (!el) return;
-                    var map = el._leaflet_map ?? el.leaflet ?? el._map;
-                    if (!map) return;
-
                     var latlng = [{lat}, {lng}];
                     var markerKey = '__rescueUserMarker_{map_id}';
-                    var blueIcon = L.icon({{
-                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-                        iconSize: [25, 41],
-                        iconAnchor: [12, 41],
-                        popupAnchor: [1, -34],
-                        shadowSize: [41, 41]
-                    }});
+                    var attempts = 0;
 
-                    if (window[markerKey]) {{
-                        window[markerKey].setLatLng(latlng);
-                    }} else {{
-                        window[markerKey] = L.marker(latlng, {{ icon: blueIcon }}).addTo(map);
+                    function syncMarker() {{
+                        attempts += 1;
+                        var el = getElement({map_id});
+                        var map = el && (el._leaflet_map || el.leaflet || el._map);
+                        if (!map || typeof L === 'undefined') {{
+                            if (attempts < 12) setTimeout(syncMarker, 120);
+                            return;
+                        }}
+
+                        map.invalidateSize();
+
+                        var markerOptions = {{}};
+                        try {{
+                            markerOptions.icon = L.icon({{
+                                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+                                iconSize: [25, 41],
+                                iconAnchor: [12, 41],
+                                popupAnchor: [1, -34],
+                                shadowSize: [41, 41]
+                            }});
+                        }} catch (e) {{}}
+
+                        if (window[markerKey]) {{
+                            window[markerKey].setLatLng(latlng);
+                            if (markerOptions.icon) window[markerKey].setIcon(markerOptions.icon);
+                        }} else {{
+                            window[markerKey] = L.marker(latlng, markerOptions).addTo(map);
+                        }}
+
+                        window[markerKey].options.title = 'Vị trí hiện tại của bạn';
+
+                        map.setView(latlng, Math.max(map.getZoom() || 13, 16), {{ animate: true }});
+                        setTimeout(function() {{ map.invalidateSize(); }}, 250);
                     }}
 
-                    window[markerKey]
-                        .setIcon(blueIcon)
-                        .bindPopup('<div style="font-weight:600;color:#2563eb;">Vị trí hiện tại của bạn</div>')
-                        .openPopup();
-
-                    map.invalidateSize();
-                    map.flyTo(latlng, 16, {{ animate: true, duration: 0.8 }});
-                    setTimeout(function() {{ map.invalidateSize(); }}, 250);
+                    syncMarker();
                 }})();
             """, timeout=5.0)
 

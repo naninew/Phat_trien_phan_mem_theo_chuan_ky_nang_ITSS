@@ -44,6 +44,14 @@ POST_TOPIC_OPTIONS = {
 }
 
 
+TOPIC_BADGE_CLASSES = {
+    "qa": "bg-sky-50 text-sky-800 border-sky-200",
+    "experience": "bg-amber-50 text-amber-800 border-amber-200",
+    "review": "bg-violet-50 text-violet-800 border-violet-200",
+    "alert": "bg-rose-50 text-rose-800 border-rose-200",
+}
+
+
 def _topic_key(value: str | None) -> str:
     text = (value or "").lower()
     if any(word in text for word in ["hỏi", "hỏi đáp", "khác", "hỏng", "thủng", "hết xăng", "tai nạn"]):
@@ -55,6 +63,10 @@ def _topic_key(value: str | None) -> str:
     if any(word in text for word in ["cảnh báo", "đường", "nguy hiểm"]):
         return "alert"
     return "qa"
+
+
+def _topic_badge_classes(value: str | None) -> str:
+    return TOPIC_BADGE_CLASSES.get(_topic_key(value), TOPIC_BADGE_CLASSES["qa"])
 
 
 def _safe_time(value: str | None) -> datetime:
@@ -96,6 +108,14 @@ def _media_url(path: str | None) -> str:
     if path.startswith("http://") or path.startswith("https://"):
         return path
     return f"{BACKEND_URL.replace('/api/v1', '')}{path}"
+
+
+def _avatar_url(data: Dict[str, Any]) -> str:
+    return _media_url(
+        data.get("user_avatar_url")
+        or data.get("avatar_url")
+        or data.get("user_avatar")
+    )
 
 
 def _excerpt(text: str | None, limit: int = 180) -> str:
@@ -263,6 +283,24 @@ def create_community_page():
                 font-size: 13px;
                 font-weight: 700;
             }
+            .status-resolved-badge,
+            .topic-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                width: fit-content;
+                border: 1px solid;
+                border-radius: 999px;
+                padding: 5px 10px;
+                font-size: 12px;
+                line-height: 1;
+                font-weight: 900;
+            }
+            .status-resolved-badge {
+                background: #dcfce7;
+                border-color: #bbf7d0;
+                color: #166534;
+            }
             .community-panel {
                 border-radius: 16px;
                 padding: 16px;
@@ -272,13 +310,97 @@ def create_community_page():
                 font-weight: 950;
                 color: #0f172a;
             }
+            .panel-heading {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                border-radius: 14px;
+                border: 1px solid;
+                padding: 10px 12px;
+            }
+            .panel-heading-blue {
+                background: #eff6ff;
+                border-color: #bfdbfe;
+            }
+            .panel-heading-emerald {
+                background: #ecfdf5;
+                border-color: #a7f3d0;
+            }
+            .panel-heading-amber {
+                background: #fffbeb;
+                border-color: #fde68a;
+            }
+            .panel-heading-slate {
+                background: #f1f5f9;
+                border-color: #cbd5e1;
+            }
+            .panel-heading-icon {
+                height: 34px;
+                width: 34px;
+                border-radius: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: #eff6ff;
+                box-shadow: inset 0 0 0 1px #dbeafe;
+            }
+            .panel-heading-icon-blue {
+                background: #eff6ff;
+                box-shadow: inset 0 0 0 1px #dbeafe;
+                color: #2563eb;
+            }
+            .panel-heading-icon-emerald {
+                background: #ecfdf5;
+                box-shadow: inset 0 0 0 1px #bbf7d0;
+                color: #059669;
+            }
+            .panel-heading-icon-amber {
+                background: #fffbeb;
+                box-shadow: inset 0 0 0 1px #fde68a;
+                color: #d97706;
+            }
+            .panel-heading-icon-slate {
+                background: #f1f5f9;
+                box-shadow: inset 0 0 0 1px #cbd5e1;
+                color: #475569;
+            }
             .rank-row {
                 border-radius: 14px;
                 padding: 10px;
                 transition: 160ms ease;
+                border: 1px solid transparent;
             }
             .rank-row:hover {
                 background: #f8fafc;
+                border-color: #e2e8f0;
+            }
+            .rank-number {
+                height: 34px;
+                width: 34px;
+                border-radius: 12px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                background: #eff6ff;
+                color: #1d4ed8;
+                font-weight: 950;
+                box-shadow: inset 0 0 0 1px #dbeafe;
+            }
+            .sidebar-avatar {
+                height: 38px;
+                width: 38px;
+                border-radius: 14px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: #ecfdf5;
+                box-shadow: inset 0 0 0 1px #bbf7d0;
+            }
+            .posting-tip {
+                border-radius: 14px;
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                padding: 10px;
             }
             .dialog-card {
                 border-radius: 22px;
@@ -526,16 +648,15 @@ def create_community_page():
                     with ui.column().classes("flex-1 min-w-0 gap-3"):
                         with ui.row().classes("items-start justify-between gap-3"):
                             with ui.row().classes("items-center gap-2 min-w-0"):
-                                with ui.element("div").classes("h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center shrink-0"):
-                                    ui.icon("account_circle").classes("text-blue-600")
+                                _render_user_avatar(post)
                                 with ui.column().classes("gap-0 min-w-0"):
                                     ui.label(post.get("user_name", "Người dùng")).classes("text-sm font-black text-slate-800 truncate")
                                     ui.label(_format_time(post.get("created_at"))).classes("text-xs text-slate-400")
                             if post.get("is_closed"):
-                                ui.badge("Đã giải quyết").classes("rounded-full bg-emerald-50 text-emerald-700 px-3 py-1 font-bold")
+                                _render_resolved_badge()
 
                         with ui.row().classes("items-center gap-2 flex-wrap"):
-                            ui.badge(post.get("incident_type") or topic_meta["label"]).classes("rounded-full bg-blue-50 text-blue-700 px-3 py-1 font-bold")
+                            _render_topic_badge(post.get("incident_type") or topic_meta["label"])
 
                         ui.label(post.get("title", "")).classes("post-title-modern")
                         ui.label(_excerpt(post.get("content"))).classes("post-excerpt")
@@ -550,6 +671,31 @@ def create_community_page():
             with ui.element("span").classes("comment-pill"):
                 ui.icon("mode_comment", size="1rem")
                 ui.label(f"{count} bình luận")
+
+        def _render_user_avatar(data: Dict[str, Any], size_class: str = "h-10 w-10"):
+            avatar = _avatar_url(data)
+            if avatar:
+                ui.image(avatar).classes(f"{size_class} rounded-full object-cover border border-slate-200 shrink-0")
+                return
+            with ui.element("div").classes(f"{size_class} rounded-full bg-blue-50 flex items-center justify-center shrink-0"):
+                ui.icon("account_circle").classes("text-blue-600")
+
+        def _render_resolved_badge():
+            with ui.element("span").classes("status-resolved-badge"):
+                ui.icon("check_circle", size="0.9rem")
+                ui.label("Đã giải quyết")
+
+        def _render_topic_badge(label: str | None):
+            with ui.element("span").classes(f"topic-badge {_topic_badge_classes(label)}"):
+                meta = COMMUNITY_TOPICS.get(_topic_key(label), COMMUNITY_TOPICS["qa"])
+                ui.icon(meta["icon"], size="0.9rem")
+                ui.label(label or meta["label"])
+
+        def _panel_heading(title: str, icon: str, heading_class: str, icon_class: str):
+            with ui.element("div").classes(f"panel-heading {heading_class} w-full"):
+                with ui.element("div").classes(f"panel-heading-icon {icon_class} shrink-0"):
+                    ui.icon(icon, size="1.15rem")
+                ui.label(title).classes("panel-title")
 
         def _render_sidebar():
             right_sidebar.clear()
@@ -566,30 +712,30 @@ def create_community_page():
 
             with right_sidebar:
                 with ui.element("aside").classes("community-panel w-full"):
-                    ui.label("Bài viết nổi bật").classes("panel-title")
+                    _panel_heading("Bài viết nổi bật", "local_fire_department", "panel-heading-blue", "panel-heading-icon-blue")
                     with ui.column().classes("w-full gap-2 mt-3"):
                         for index, post in enumerate(top_posts, start=1):
                             with ui.row().classes("rank-row w-full items-start gap-3 cursor-pointer").on(
                                 "click", _open_detail_handler(post["id"])
                             ):
-                                ui.label(str(index)).classes("h-7 w-7 rounded-full bg-blue-50 text-center leading-7 font-black text-blue-700")
+                                ui.label(str(index)).classes("rank-number shrink-0")
                                 with ui.column().classes("gap-0 min-w-0 flex-1"):
                                     ui.label(post.get("title", "")).classes("text-sm font-bold text-slate-800 line-clamp-2")
                                     ui.label(f"{_post_metric(post, 'comments')} bình luận").classes("text-xs text-slate-400")
 
                 with ui.element("aside").classes("community-panel w-full"):
-                    ui.label("Thành viên tích cực").classes("panel-title")
+                    _panel_heading("Thành viên tích cực", "groups", "panel-heading-emerald", "panel-heading-icon-emerald")
                     with ui.column().classes("w-full gap-2 mt-3"):
                         for name, score in member_rows:
                             with ui.row().classes("rank-row w-full items-center gap-3"):
-                                with ui.element("div").classes("h-9 w-9 rounded-full bg-emerald-50 flex items-center justify-center"):
+                                with ui.element("div").classes("sidebar-avatar shrink-0"):
                                     ui.icon("person").classes("text-emerald-600")
                                 with ui.column().classes("gap-0 min-w-0 flex-1"):
                                     ui.label(name).classes("text-sm font-bold text-slate-800 truncate")
                                     ui.label(f"{score} đóng góp").classes("text-xs text-slate-400")
 
                 with ui.element("aside").classes("community-panel w-full"):
-                    ui.label("Đơn vị cứu hộ được đánh giá cao").classes("panel-title")
+                    _panel_heading("Đơn vị cứu hộ được đánh giá cao", "workspace_premium", "panel-heading-amber", "panel-heading-icon-amber")
                     with ui.column().classes("w-full gap-2 mt-3"):
                         if not state["top_companies"]:
                             ui.label("Chưa có dữ liệu đánh giá.").classes("text-sm text-slate-400")
@@ -602,6 +748,22 @@ def create_community_page():
                                     ui.label(
                                         f"{float(company.get('rating_avg') or 0):.1f} sao · {int(company.get('rating_count') or 0)} đánh giá"
                                     ).classes("text-xs text-slate-400")
+
+                with ui.element("aside").classes("community-panel w-full"):
+                    _panel_heading("Lưu ý khi đăng bài", "tips_and_updates", "panel-heading-slate", "panel-heading-icon-slate")
+                    with ui.column().classes("w-full gap-2 mt-3"):
+                        tips = [
+                            ("Mô tả rõ hiện tượng", "Nêu loại xe, tình huống xảy ra và dấu hiệu bất thường."),
+                            ("Thêm ảnh nếu có", "Ảnh lỗi, vị trí hoặc phụ tùng giúp cộng đồng hỗ trợ nhanh hơn."),
+                            ("Chọn đúng chủ đề", "Hỏi đáp, kinh nghiệm, review hoặc cảnh báo để bài dễ tìm."),
+                        ]
+                        for icon, (title, body) in zip(["description", "photo_camera", "sell"], tips):
+                            with ui.row().classes("posting-tip w-full items-start gap-3"):
+                                with ui.element("div").classes("h-8 w-8 rounded-xl bg-blue-50 flex items-center justify-center shrink-0"):
+                                    ui.icon(icon, size="1rem").classes("text-blue-600")
+                                with ui.column().classes("gap-0 min-w-0"):
+                                    ui.label(title).classes("text-sm font-bold text-slate-800")
+                                    ui.label(body).classes("text-xs leading-snug text-slate-500")
 
         def _open_create_dialog():
             with ui.dialog() as dialog, ui.card().classes("dialog-card w-[620px] max-w-[94vw] max-h-[92vh] p-0 overflow-hidden"):
@@ -775,11 +937,11 @@ def create_community_page():
                         with ui.row().classes("w-full justify-between items-center mb-5"):
                             with ui.row().classes("items-center gap-2"):
                                 ui.button(icon="arrow_back", on_click=dialog.close).props("flat round color=primary")
-                                ui.badge(post.get("incident_type") or "Thảo luận").classes("rounded-full bg-blue-50 text-blue-700 px-3 py-1 font-bold")
+                                _render_topic_badge(post.get("incident_type") or "Thảo luận")
                                 closed_badge_area = ui.row().classes("items-center gap-2")
                                 with closed_badge_area:
                                     if post.get("is_closed"):
-                                        ui.badge("Đã giải quyết").classes("rounded-full bg-emerald-50 text-emerald-700 px-3 py-1 font-bold")
+                                        _render_resolved_badge()
 
                             if is_owner:
                                 with ui.row().classes("items-center gap-2"):
@@ -795,7 +957,7 @@ def create_community_page():
                                                 ui.notify("Đã đánh dấu bài viết là đã giải quyết", type="positive")
                                                 btn.delete()
                                                 with closed_badge_area:
-                                                    ui.badge("Đã giải quyết").classes("rounded-full bg-emerald-50 text-emerald-700 px-3 py-1 font-bold")
+                                                    _render_resolved_badge()
                                                 await refresh_posts()
                                             else:
                                                 ui.notify("Không thể đánh dấu bài viết", type="negative")
@@ -812,8 +974,7 @@ def create_community_page():
                         ui.label(post.get("title", "")).classes("text-3xl font-black text-slate-900 mb-4")
 
                         with ui.row().classes("items-center gap-3 mb-5"):
-                            with ui.element("div").classes("h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center"):
-                                ui.icon("account_circle").classes("text-blue-600")
+                            _render_user_avatar(post)
                             with ui.column().classes("gap-0"):
                                 ui.label(post.get("user_name", "Người dùng")).classes("font-bold text-slate-800")
                                 ui.label(_format_time(post.get("created_at"))).classes("text-xs text-slate-400")
@@ -863,6 +1024,7 @@ def create_community_page():
                                     _render_reply({
                                         "id": response.get("id"),
                                         "user_name": response.get("user_name") or "Bạn",
+                                        "user_avatar_url": response.get("user_avatar_url"),
                                         "content": response.get("content") or content,
                                         "created_at": response.get("created_at"),
                                     })
@@ -882,7 +1044,7 @@ def create_community_page():
             with ui.element("div").classes("reply-card"):
                 with ui.row().classes("w-full justify-between gap-3"):
                     with ui.row().classes("items-center gap-2 min-w-0"):
-                        ui.icon("account_circle").classes("text-blue-600")
+                        _render_user_avatar(reply, "h-8 w-8")
                         ui.label(reply.get("user_name") or "Bạn").classes("font-bold text-sm text-blue-700 truncate")
                     ui.label(_format_time(reply.get("created_at")) if reply.get("created_at") else "Vừa xong").classes("text-xs text-slate-400")
                 ui.label(reply.get("content", "")).classes("mt-2 text-sm text-slate-700")

@@ -70,6 +70,7 @@ def create_post(
         "id": post.id,
         "user_id": post.user_id,
         "user_name": post.user.full_name,
+        "user_avatar_url": post.user.avatar_url,
         "title": post.title,
         "content": post.content,
         "images": post.images,
@@ -93,6 +94,7 @@ def get_posts(
             "id": p.id,
             "user_id": p.user_id,
             "user_name": p.user.full_name,
+            "user_avatar_url": p.user.avatar_url,
             "title": p.title,
             "content": p.content,
             "images": p.images,
@@ -117,6 +119,7 @@ def get_post(
         "id": post.id,
         "user_id": post.user_id,
         "user_name": post.user.full_name,
+        "user_avatar_url": post.user.avatar_url,
         "title": post.title,
         "content": post.content,
         "images": post.images,
@@ -128,6 +131,7 @@ def get_post(
                 "id": r.id,
                 "user_id": r.user_id,
                 "user_name": r.user.full_name,
+                "user_avatar_url": r.user.avatar_url,
                 "content": r.content,
                 "is_helpful": r.is_helpful,
                 "created_at": r.created_at.isoformat()
@@ -152,7 +156,8 @@ def create_reply(
     return success_response(data={
         "id": reply.id,
         "content": reply.content,
-        "user_name": current_user["username"],
+        "user_name": reply.user.full_name,
+        "user_avatar_url": reply.user.avatar_url,
         "created_at": reply.created_at.isoformat(),
     }, message="Đã gửi phản hồi")
 
