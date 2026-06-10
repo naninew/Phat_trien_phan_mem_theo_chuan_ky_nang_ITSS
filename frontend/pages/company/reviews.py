@@ -17,10 +17,8 @@ def create_reviews_page():
 
         with page_layout("/company/reviews", title="Đánh Giá Từ Khách Hàng"):
             
-            with ui.row().classes("w-full items-center justify-between mb-8"):
-                with ui.column().classes("gap-0"):
-                    ui.label("⭐ Phản Hồi Khách Hàng").classes("text-3xl font-bold font-outfit text-primary")
-                    ui.label("Theo dõi chất lượng dịch vụ qua đánh giá thực tế").classes("opacity-60")
+            with ui.row().classes("w-full items-center justify-between mb-6"):
+                ui.label("Theo dõi chất lượng dịch vụ qua đánh giá thực tế").classes("text-lg font-medium opacity-70")
 
             reviews_container = ui.column().classes("w-full gap-4")
 

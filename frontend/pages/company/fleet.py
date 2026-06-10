@@ -18,10 +18,8 @@ def create_fleet_page():
 
         with page_layout("/company/fleet", title="Quản Lý Đội Xe"):
             
-            with ui.row().classes("w-full items-center justify-between mb-6"):
-                with ui.column().classes("gap-0"):
-                    ui.label("🚚 Đội Xe Cứu Hộ").classes("text-3xl font-bold text-gray-800")
-                    ui.label("Quản lý danh sách phương tiện và trạng thái sẵn sàng").classes("text-gray-500")
+            with ui.row().classes("w-full items-center justify-between mb-4"):
+                ui.label("Quản lý danh sách phương tiện và trạng thái sẵn sàng").classes("text-lg font-medium text-gray-500")
                 
                 ui.button("THÊM XE MỚI", icon="add", on_click=lambda: _show_add_dialog()).classes("bg-indigo-600 text-white font-bold rounded-xl px-6 py-3 shadow-lg hover:bg-indigo-700")
 

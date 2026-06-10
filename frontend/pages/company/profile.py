@@ -34,9 +34,7 @@ def create_profile_page():
 
         with page_layout("/company/profile", title="Hồ Sơ Công Ty"):
             
-            with ui.column().classes("w-full max-w-3xl mx-auto gap-6"):
-                ui.label("🏢 Hồ Sơ Công Ty").classes("text-3xl font-bold text-gray-800")
-                
+            with ui.column().classes("w-full max-w-3xl mx-auto gap-4 mt-2"):
                 with ui.card().classes("w-full rounded-2xl p-8 shadow-sm border border-gray-100"):
                     ui.label("Thông tin cơ bản").classes("text-lg font-bold text-gray-700 mb-4")
                     

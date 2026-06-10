@@ -49,12 +49,8 @@ def create_queue_page():
 
         with page_layout("/company/queue", title="Hàng Đợi Cứu Hộ"):
 
-            with ui.row().classes("w-full items-center justify-between mb-6"):
-                with ui.column().classes("gap-0"):
-                    ui.label("📊 Hàng Đợi Yêu Cầu").classes(
-                        "text-3xl font-bold font-outfit text-primary"
-                    )
-                    ui.label("Tiếp nhận và điều phối nhân sự, phương tiện").classes("opacity-60")
+            with ui.row().classes("w-full items-center justify-between mb-4"):
+                ui.label("Tiếp nhận và điều phối nhân sự, phương tiện").classes("text-lg font-medium opacity-70")
 
                 refresh_btn = ui.button(
                     icon="refresh", on_click=lambda: _load_data()

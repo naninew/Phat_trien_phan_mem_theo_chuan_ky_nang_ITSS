@@ -16,8 +16,6 @@ def create_services_management_page():
             return
 
         with page_layout("/company/services", title="Quản Lý Dịch Vụ Cứu Hộ"):
-            ui.label("🛠️ Dịch Vụ Của Công Ty").classes("text-3xl font-bold text-gray-800 mb-6")
-
             # State
             services = []
             table = None
@@ -115,8 +113,8 @@ def create_services_management_page():
                 dlg.open()
 
             # Header & Add Button
-            with ui.row().classes("w-full justify-between items-center mb-4"):
-                ui.label("Danh sách các dịch vụ bạn cung cấp").classes("text-gray-600")
+            with ui.row().classes("w-full justify-between items-center mb-6 mt-2"):
+                ui.label("Danh sách các dịch vụ bạn cung cấp").classes("text-lg font-medium text-gray-600")
                 ui.button("Thêm Dịch Vụ", icon="add", on_click=lambda: open_form()).props("unelevated").classes("bg-primary text-white rounded-xl shadow")
 
             # Table Definition

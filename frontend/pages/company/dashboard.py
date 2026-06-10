@@ -17,10 +17,8 @@ def create_company_dashboard():
 
         with page_layout("/company/dashboard", title="Bảng Điều Khiển Công Ty"):
             
-            with ui.row().classes("w-full items-center justify-between mb-8"):
-                with ui.column().classes("gap-0"):
-                    ui.label("🚀 Trung Tâm Điều Hành").classes("text-4xl font-bold font-outfit text-primary")
-                    ui.label("Tổng quan hoạt động và điều phối cứu hộ").classes("text-on-surface-variant opacity-70")
+            with ui.row().classes("w-full items-center justify-between mb-6 mt-2"):
+                ui.label("Tổng quan hoạt động và điều phối cứu hộ").classes("text-lg font-medium text-on-surface-variant opacity-70")
                 
                 ui.button("ĐIỀU PHỐI NGAY", icon="bolt", on_click=lambda: ui.navigate.to("/company/queue")) \
                     .classes("bg-primary text-white px-8 py-4 rounded-2xl shadow-xl shadow-primary/30 font-bold")

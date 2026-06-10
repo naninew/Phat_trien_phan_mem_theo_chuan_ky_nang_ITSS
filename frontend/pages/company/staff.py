@@ -87,7 +87,7 @@ def create_staff_page():
                 with ui.card().classes("w-72 rounded-2xl p-0 border border-gray-200 shadow-sm hover:shadow-md transition-all overflow-hidden"):
                     # Top section with avatar
                     with ui.column().classes("w-full p-6 items-center gap-3 bg-slate-50/50 relative"):
-                        ui.avatar(icon="person", size="4rem").classes("bg-blue-100 text-blue-600 shadow-sm")
+                        ui.avatar(icon="person", size="4rem", color="blue-1", text_color="blue-8").classes("shadow-sm")
                         
                         with ui.column().classes("items-center gap-1 w-full"):
                             ui.label(f"Nhân viên #{s['id']}").classes("text-lg font-bold text-slate-800")
