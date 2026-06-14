@@ -64,8 +64,8 @@ def create_queue_page():
         # Stores active WS tasks so we can cancel when dialog closes
         active_chat_tasks: Dict[int, asyncio.Task] = {}
 
-        def _schedule_load():
-            asyncio.create_task(_load_data())
+        async def _load_from_event(_=None):
+            await _load_data()
 
         with page_layout("/company/queue", title=""):
 
@@ -85,7 +85,7 @@ def create_queue_page():
                         rescue_id_filter = ui.input(
                             placeholder="Mã cứu hộ"
                         ).classes("min-w-[180px] flex-1 company-field").props("outlined rounded dense clearable")
-                        rescue_id_filter.on("keydown.enter", lambda: _schedule_load())
+                        rescue_id_filter.on("keydown.enter", _load_from_event)
 
                         # Status filter
                         status_filter = ui.select(
@@ -99,7 +99,7 @@ def create_queue_page():
                                 'COMPLETED': 'Hoàn thành'
                             },
                             value='all',
-                            on_change=lambda: _schedule_load()
+                            on_change=_load_from_event
                         ).classes("min-w-[220px] flex-1 company-field").props("outlined rounded dense")
 
                         # Time range dropdown
@@ -112,15 +112,15 @@ def create_queue_page():
                                 '6m':  '6 tháng qua',
                             },
                             value='all',
-                            on_change=lambda: _schedule_load()
+                            on_change=_load_from_event
                         ).classes("min-w-[220px] flex-1 company-field").props("outlined rounded dense")
 
                         with ui.row().classes("items-center gap-2 ml-auto flex-shrink-0"):
                             ui.button(
-                                "Tìm kiếm", icon="search", on_click=lambda: _schedule_load()
+                                "Tìm kiếm", icon="search", on_click=_load_from_event
                             ).classes("company-primary-btn px-4").props("unelevated no-caps")
                             refresh_btn = ui.button(
-                                "Làm mới", icon="refresh", on_click=lambda: _schedule_load()
+                                "Làm mới", icon="refresh", on_click=_load_from_event
                             ).classes("company-muted-btn").props("flat no-caps")
 
                 queue_container = ui.column().classes("w-full gap-4")
@@ -697,15 +697,21 @@ def create_queue_page():
                             ).classes("company-muted-btn").props("flat no-caps")
 
                         if r['status'] == 'PENDING':
+                            async def reject_current(req_id=r['id']):
+                                await _do_reject(req_id)
+
+                            async def accept_current(req_id=r['id']):
+                                await _do_accept(req_id)
+
                             ui.button(
                                 "Từ chối",
                                 icon="close",
-                                on_click=lambda req_id=r['id']: asyncio.create_task(_do_reject(req_id))
+                                on_click=reject_current
                             ).props("flat no-caps").classes("rounded-xl text-red-600 font-bold")
                             ui.button(
                                 "Tiếp nhận",
                                 icon="check",
-                                on_click=lambda req_id=r['id']: asyncio.create_task(_do_accept(req_id))
+                                on_click=accept_current
                             ).classes("company-primary-btn px-5").props("unelevated no-caps")
 
                         elif r['status'] == 'ACCEPTED':
@@ -716,17 +722,23 @@ def create_queue_page():
                             ).classes("company-primary-btn px-5").props("unelevated no-caps")
 
                         elif r['status'] == 'ASSIGNED':
+                            async def start_moving(req_id=r['id']):
+                                await _update_status(req_id, 'ON_THE_WAY')
+
                             ui.button(
                                 "Bắt đầu di chuyển",
                                 icon="navigation",
-                                on_click=lambda req_id=r['id']: asyncio.create_task(_update_status(req_id, 'ON_THE_WAY'))
+                                on_click=start_moving
                             ).classes("company-primary-btn px-5").props("unelevated no-caps")
 
                         elif r['status'] == 'ON_THE_WAY':
+                            async def mark_in_progress(req_id=r['id']):
+                                await _update_status(req_id, 'IN_PROGRESS')
+
                             ui.button(
                                 "Đã đến hiện trường",
                                 icon="place",
-                                on_click=lambda req_id=r['id']: asyncio.create_task(_update_status(req_id, 'IN_PROGRESS'))
+                                on_click=mark_in_progress
                             ).classes("company-primary-btn px-5").props("unelevated no-caps")
 
                         elif r['status'] == 'IN_PROGRESS':
