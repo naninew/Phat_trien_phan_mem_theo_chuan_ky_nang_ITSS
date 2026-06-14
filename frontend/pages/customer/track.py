@@ -740,11 +740,16 @@ def create_track_page() -> None:
 
             status_chip.set_text(req["status"])
             status_chip.props(f"color={STATUS_COLORS.get(req['status'], 'grey')}")
-            if req["status"] == "COMPLETED":
+            if req["status"] in ("COMPLETED", "REJECTED"):
                 chat_state["locked"] = True
                 chat_input.disable()
                 send_btn.disable()
                 chat_input.props('placeholder="Cuộc trò chuyện đã khóa"')
+                
+                notice_text = "Yêu cầu đã hoàn thành, cuộc trò chuyện đã được khóa."
+                if req["status"] == "REJECTED":
+                    notice_text = "Yêu cầu đã bị từ chối, cuộc trò chuyện đã được khóa."
+                chat_lock_notice.set_text(notice_text)
                 chat_lock_notice.classes(remove="hidden")
             else:
                 chat_state["locked"] = False

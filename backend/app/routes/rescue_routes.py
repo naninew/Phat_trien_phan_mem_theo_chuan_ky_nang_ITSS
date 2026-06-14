@@ -663,8 +663,9 @@ def accept_request(
     )
 
 @router.put("/requests/{request_id}/reject")
-def reject_request(
+async def reject_request(
     request_id: int,
+    reason: str = Query(..., description="Lý do từ chối"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(auth_svc.get_current_user_from_token),
 ):
@@ -679,6 +680,23 @@ def reject_request(
     req = rescue_svc.reject_request(db, request_id, company.id)
     if not req:
         raise HTTPException(status_code=400, detail="Không thể từ chối yêu cầu")
+    
+    # Send reason as a chat message
+    from app.schemas.chat import MessageCreate
+    from app.services import chat_svc
+    msg_data = MessageCreate(
+        request_id=request_id,
+        receiver_id=req.user_id,
+        sender_type="company",
+        content=f"Chúng tôi rất tiếc phải từ chối yêu cầu của bạn. Lý do: {reason}"
+    )
+    try:
+        msg = chat_svc.send_message(db, current_user["user_id"], msg_data)
+        from app.routes.chat_routes import _broadcast_ws_message
+        await _broadcast_ws_message(request_id, msg)
+    except Exception as e:
+        print(f"Failed to send reject chat message: {e}")
+
     _create_notification(
         db,
         req.user_id,

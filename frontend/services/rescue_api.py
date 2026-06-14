@@ -296,8 +296,8 @@ async def get_company_reviews() -> List[Dict[str, Any]]:
     r_det = await api_client.get(f"/rescue/companies/{company_id}/full-details")
     return r_det.get("data", {}).get("reviews", [])
 
-async def reject_request(request_id: int) -> bool:
-    r = await api_client.put(f"/rescue/requests/{request_id}/reject")
+async def reject_request(request_id: int, reason: str) -> bool:
+    r = await api_client.put(f"/rescue/requests/{request_id}/reject", params={"reason": reason})
     return r.get("success", False)
 
 

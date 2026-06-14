@@ -377,7 +377,6 @@ def reject_request(
     if not req or req.status != RequestStatus.PENDING:
         return None
     req.status = RequestStatus.REJECTED
-    req.company_id = None
     db.commit()
     db.refresh(req)
     return req

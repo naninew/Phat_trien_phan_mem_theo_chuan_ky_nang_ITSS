@@ -697,8 +697,8 @@ def create_queue_page():
                             ).classes("company-muted-btn").props("flat no-caps")
 
                         if r['status'] == 'PENDING':
-                            async def reject_current(req_id=r['id']):
-                                await _do_reject(req_id)
+                            def reject_current(req_id=r['id']):
+                                _do_reject(req_id)
 
                             async def accept_current(req_id=r['id']):
                                 await _do_accept(req_id)
@@ -869,13 +869,42 @@ def create_queue_page():
                     )
             d.open()
 
-        async def _do_reject(req_id):
-            try:
-                if await reject_request(req_id):
-                    ui.notify("Đã từ chối yêu cầu", type="info")
-                    await _load_data()
-            except Exception as e:
-                ui.notify(f"Lỗi: {e}", type="negative")
+        def _do_reject(req_id):
+            nonlocal dialog_open
+            dialog_open = True
+
+            def close_reject_dialog():
+                nonlocal dialog_open
+                dialog_open = False
+                d.close()
+
+            with ui.dialog().props("persistent") as d, ui.card().classes("p-6 rounded-3xl w-[400px]"):
+                ui.label("Lý do từ chối").classes("text-xl font-bold mb-4 font-outfit text-primary")
+                reason_input = ui.textarea(
+                    label="Nhập lý do", 
+                    placeholder="VD: Hiện tại chúng tôi đang quá tải..."
+                ).classes("w-full mb-6").props("outlined rounded rows=3")
+                
+                with ui.row().classes("w-full justify-end gap-3"):
+                    ui.button("HỦY", on_click=close_reject_dialog).props("flat")
+
+                    async def confirm_reject():
+                        val = reason_input.value
+                        if not val or not val.strip():
+                            ui.notify("Vui lòng nhập lý do từ chối", type="warning")
+                            return
+                        try:
+                            if await reject_request(req_id, reason=val.strip()):
+                                ui.notify("Đã từ chối yêu cầu", type="info")
+                                await _load_data()
+                                close_reject_dialog()
+                        except Exception as e:
+                            ui.notify(f"Lỗi: {e}", type="negative")
+
+                    ui.button("XÁC NHẬN", on_click=confirm_reject).classes(
+                        "bg-red-600 text-white px-6 rounded-xl font-bold"
+                    )
+            d.open()
 
         async def _update_status(req_id, status):
             try:
