@@ -143,6 +143,8 @@ async def assign_request(request_id: int, staff_id: int, vehicle_id: int) -> Dic
         "rescue_vehicle_id": vehicle_id
     }
     r = await api_client.post(f"/rescue/requests/{request_id}/assign", data=payload)
+    if not r.get("success", False):
+        raise RuntimeError(r.get("message") or "Không thể phân công yêu cầu")
     return r.get("data", {})
 
 
@@ -164,6 +166,8 @@ async def update_request_status(
     if invoice_description is not None:
         payload["invoice_description"] = invoice_description
     r = await api_client.put(f"/rescue/requests/{request_id}/status", data=payload)
+    if not r.get("success", False):
+        raise RuntimeError(r.get("message") or "Không thể cập nhật trạng thái")
     return r.get("data", {})
 
 
@@ -178,6 +182,8 @@ async def add_vehicle(license_plate: str, vehicle_type: str, capacity: str = "")
         "/rescue/vehicles",
         data={"plate_number": license_plate, "vehicle_type": vehicle_type, "capacity": capacity or None},
     )
+    if not r.get("success", False):
+        raise RuntimeError(r.get("message") or "Không thể thêm xe")
     return r.get("data", {})
 
 async def update_vehicle(vehicle_id: int, license_plate: str, vehicle_type: str, capacity: str = "") -> Dict[str, Any]:
@@ -302,4 +308,6 @@ async def get_chat_messages(request_id: int) -> List[Dict[str, Any]]:
 
 async def send_chat_message(request_id: int, message: str) -> Dict[str, Any]:
     r = await api_client.post(f"/chat/{request_id}", params={"message": message})
+    if not r.get("success", False):
+        raise RuntimeError(r.get("message") or "Không thể gửi tin nhắn")
     return r.get("data", {})

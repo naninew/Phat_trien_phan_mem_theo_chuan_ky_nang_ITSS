@@ -4,6 +4,7 @@ Trang thông tin công ty – dành cho quản lý công ty.
 from nicegui import ui
 from core.auth import require_role
 from components.page_layout import page_layout
+from components.company_ui import inject_company_styles, page_header, section_heading, status_badge
 from services.api_client import api_client
 import asyncio
 
@@ -32,55 +33,84 @@ def create_profile_page():
             is_new = False
             c = res.get("data", {})
 
-        with page_layout("/company/profile", title="Hồ Sơ Công Ty"):
-            
-            with ui.column().classes("w-full max-w-3xl mx-auto gap-4 mt-2"):
-                with ui.card().classes("w-full rounded-2xl p-8 shadow-sm border border-gray-100"):
-                    ui.label("Thông tin cơ bản").classes("text-lg font-bold text-gray-700 mb-4")
-                    
-                    name = ui.input(label="Tên công ty (*)", value=c.get('company_name', '')).classes("w-full").props("outlined")
-                    license_input = ui.input(label="Số giấy phép kinh doanh (*)", value=c.get('business_license', '')).classes("w-full mt-2").props("outlined")
-                    hotline = ui.input(label="Hotline cứu hộ (*)", value=c.get('hotline', '')).classes("w-full mt-2").props("outlined")
-                    
-                    ui.label("Vị trí & Hoạt động").classes("text-lg font-bold text-gray-700 mt-8 mb-4")
-                    addr = ui.textarea(label="Địa chỉ trụ sở (*)", value=c.get('address', '')).classes("w-full").props("outlined")
-                    operating_area = ui.input(label="Khu vực hoạt động", value=c.get('operating_area', '')).classes("w-full mt-2").props("outlined")
-                    
-                    with ui.row().classes("w-full gap-4 mt-2"):
-                        lat = ui.number(label="Vĩ độ (Latitude)", value=c.get('latitude', 0.0), format="%.6f").classes("flex-1").props("outlined")
-                        lng = ui.number(label="Kinh độ (Longitude)", value=c.get('longitude', 0.0), format="%.6f").classes("flex-1").props("outlined")
-                    
-                    ui.button("Lấy vị trí hiện tại của tôi", icon="my_location", on_click=lambda: _get_geo(lat, lng)).classes("mt-2").props("flat color=indigo")
+        inject_company_styles()
 
-                    ui.label("Thông tin bổ sung").classes("text-lg font-bold text-gray-700 mt-8 mb-4")
-                    description = ui.textarea(label="Mô tả công ty", value=c.get('description', '')).classes("w-full").props("outlined")
+        with page_layout("/company/profile", title=""):
+            with ui.column().classes("company-page gap-6"):
+                page_header(
+                    "Hồ sơ công ty",
+                    "Quản lý thông tin doanh nghiệp, liên hệ, vị trí và trạng thái hoạt động.",
+                    "business",
+                )
+
+                with ui.element("div").classes("company-card p-6 w-full"):
+                    section_heading("Thông tin cơ bản", "Thông tin nhận diện và giấy phép hoạt động")
+                    
+                    with ui.row().classes("w-full gap-4 mt-4"):
+                        name = ui.input(label="Tên công ty (*)", value=c.get('company_name', '')).classes("flex-1 company-field").props("outlined")
+                        license_input = ui.input(label="Số giấy phép kinh doanh (*)", value=c.get('business_license', '')).classes("flex-1 company-field").props("outlined")
+                    
+                    ui.separator().classes("my-6")
+                    section_heading("Liên hệ", "Kênh khách hàng dùng để kết nối cứu hộ")
+                    hotline = ui.input(label="Hotline cứu hộ (*)", value=c.get('hotline', '')).classes("w-full mt-4 company-field").props("outlined")
+
+                    ui.separator().classes("my-6")
+                    section_heading("Vị trí & hoạt động", "Địa chỉ trụ sở, khu vực phục vụ và tọa độ vận hành")
+                    addr = ui.textarea(label="Địa chỉ trụ sở (*)", value=c.get('address', '')).classes("w-full mt-4 company-field").props("outlined rounded rows=3")
+                    operating_area = ui.input(label="Khu vực hoạt động", value=c.get('operating_area', '')).classes("w-full mt-3 company-field").props("outlined")
+                    
+                    with ui.row().classes("w-full gap-4 mt-3"):
+                        lat = ui.number(label="Vĩ độ (Latitude)", value=c.get('latitude', 0.0), format="%.6f").classes("flex-1 company-field").props("outlined")
+                        lng = ui.number(label="Kinh độ (Longitude)", value=c.get('longitude', 0.0), format="%.6f").classes("flex-1 company-field").props("outlined")
+                    
+                    ui.button("Lấy vị trí hiện tại", icon="my_location", on_click=lambda: _get_geo(lat, lng)).classes("company-muted-btn mt-2").props("flat no-caps")
+
+                    ui.separator().classes("my-6")
+                    section_heading("Cài đặt dịch vụ", "Mô tả ngắn hiển thị cho khách hàng khi chọn đơn vị")
+                    description = ui.textarea(label="Mô tả công ty", value=c.get('description', '')).classes("w-full mt-4 company-field").props("outlined rounded rows=4")
                     
                     if not is_new:
-                        ui.label("Trạng thái hệ thống (Chỉ xem)").classes("text-lg font-bold text-gray-700 mt-8 mb-4")
-                        with ui.row().classes("w-full gap-4"):
-                            ui.input(label="Đánh giá trung bình", value=str(c.get('rating_avg', 0.0))).classes("flex-1").props("outlined readonly")
-                            v_status = "Đã xác minh" if c.get('is_verified') else "Chưa xác minh"
-                            ui.input(label="Tình trạng xác minh", value=v_status).classes("flex-1").props("outlined readonly")
-                            ui.input(label="Trạng thái", value=c.get('status', 'pending')).classes("flex-1").props("outlined readonly")
+                        ui.separator().classes("my-6")
+                        section_heading("Trạng thái hệ thống", "Thông tin chỉ đọc từ hệ thống kiểm duyệt")
+                        with ui.row().classes("w-full gap-3 mt-4 flex-wrap"):
+                            status_badge(f"Đánh giá {c.get('rating_avg', 0.0)}", "amber")
+                            status_badge("Đã xác minh" if c.get('is_verified') else "Chưa xác minh", "emerald" if c.get('is_verified') else "amber")
+                            status_badge(c.get('status', 'pending'), "blue")
 
                     ui.separator().classes("my-8")
                     
-                    with ui.row().classes("w-full gap-4"):
+                    with ui.row().classes("w-full gap-4 justify-end"):
                         if is_new:
-                            save_btn = ui.button("TẠO HỒ SƠ", icon="add_circle", on_click=lambda: _save_profile(True)).classes("flex-1 py-4 rounded-xl bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-100")
+                            save_btn = ui.button("Tạo hồ sơ", icon="add_circle", on_click=lambda: _save_profile(True)).classes("company-primary-btn px-6").props("unelevated no-caps")
                         else:
-                            save_btn = ui.button("LƯU THAY ĐỔI", icon="save", on_click=lambda: _save_profile(False)).classes("flex-1 py-4 rounded-xl bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-100")
-                            ui.button("XÓA HỒ SƠ", icon="delete", color="red", on_click=lambda: _confirm_delete()).classes("py-4 px-6 rounded-xl font-bold")
+                            ui.button("Xóa hồ sơ", icon="delete", color="red", on_click=lambda: _confirm_delete()).classes("rounded-xl px-5 font-bold").props("flat no-caps")
+                            save_btn = ui.button("Lưu thay đổi", icon="save", on_click=lambda: _save_profile(False)).classes("company-primary-btn px-6").props("unelevated no-caps")
 
         # ── Logic ────────────────────────────────────────────────────────
         
         async def _get_geo(lat_f, lng_f):
-            pos = await ui.run_javascript('navigator.geolocation.getCurrentPosition(p => p.coords, e => null)')
-            if pos:
-                lat_f.set_value(pos.latitude)
-                lng_f.set_value(pos.longitude)
+            pos = await ui.run_javascript("""
+                await new Promise((resolve) => {
+                    if (!navigator.geolocation) {
+                        resolve(null);
+                        return;
+                    }
+                    navigator.geolocation.getCurrentPosition(
+                        (p) => resolve({
+                            latitude: p.coords.latitude,
+                            longitude: p.coords.longitude,
+                        }),
+                        () => resolve(null),
+                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+                    );
+                })
+            """, timeout=12)
+            if pos and pos.get("latitude") is not None and pos.get("longitude") is not None:
+                lat_f.set_value(pos["latitude"])
+                lng_f.set_value(pos["longitude"])
+                ui.notify("Đã lấy vị trí hiện tại", type="positive")
             else:
-                ui.notify("Không thể lấy vị trí")
+                ui.notify("Không thể lấy vị trí. Hãy cấp quyền vị trí cho trình duyệt.", type="warning")
 
         async def _save_profile(creating: bool):
             # Validate required fields

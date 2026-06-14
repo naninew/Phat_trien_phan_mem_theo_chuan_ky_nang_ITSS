@@ -42,13 +42,24 @@ def create_navbar():
                                 _render_user_avatar()
                         _render_nav_avatar()
                         ui.label(get_user_name()).classes("font-bold hide-on-mobile")
-                    with ui.menu() as menu:
+                    with ui.menu().props('anchor="bottom right" self="top right"').classes(
+                        "account-menu rounded-2xl shadow-xl border border-slate-100 p-1"
+                    ) as menu:
+                        def account_menu_item(label: str, icon: str, on_click, *, danger: bool = False):
+                            with ui.item(on_click=on_click).classes(
+                                f"account-menu-item {'account-menu-danger' if danger else ''}"
+                            ):
+                                with ui.item_section().props("avatar").classes("min-w-0 pr-2"):
+                                    ui.icon(icon, size="20px").classes("account-menu-icon")
+                                with ui.item_section():
+                                    ui.label(label).classes("account-menu-label")
+
                         if get_user_role() == "customer":
-                            ui.menu_item('Tổng quan', on_click=lambda: ui.navigate.to('/customer/overview'))
-                        ui.menu_item('Hồ sơ cá nhân', on_click=lambda: ui.navigate.to('/profile'))
-                        ui.menu_item('Cài đặt', on_click=_open_settings_dialog)
+                            account_menu_item('Tổng quan', 'dashboard', lambda: ui.navigate.to('/customer/overview'))
+                        account_menu_item('Hồ sơ cá nhân', 'person', lambda: ui.navigate.to('/profile'))
+                        account_menu_item('Cài đặt', 'settings', _open_settings_dialog)
                         ui.separator()
-                        ui.menu_item('Đăng xuất', on_click=logout_user).classes('text-red-500 hover:bg-red-50')
+                        account_menu_item('Đăng xuất', 'logout', logout_user, danger=True)
                     ui.timer(
                         0.2,
                         lambda: asyncio.create_task(_refresh_current_user_profile(_render_nav_avatar)),
@@ -124,29 +135,44 @@ def _inject_theme_styles():
     <style>
         body.body--dark,
         .body--dark {
-            --surface: #0f172a;
-            --on-surface: #e5eefb;
-            --surface-variant: #1e293b;
-            --on-surface-variant: #94a3b8;
-            --glass: rgba(30, 41, 59, 0.92);
-            --glass-border: rgba(148, 163, 184, 0.2);
-            background: #0b1120 !important;
-            color: #e5eefb !important;
+            --surface: #0b1220;
+            --on-surface: #eaf2ff;
+            --surface-variant: #172033;
+            --on-surface-variant: #9fb0c8;
+            --glass: rgba(15, 23, 42, 0.86);
+            --glass-border: rgba(148, 163, 184, 0.22);
+            background: #0b1220 !important;
+            color: #eaf2ff !important;
         }
 
         body.body--dark .bg-surface,
         body.body--dark .q-page,
         body.body--dark .nicegui-content {
-            background: #0b1120 !important;
-            color: #e5eefb !important;
+            background:
+                radial-gradient(circle at top right, rgba(37, 99, 235, 0.13), transparent 34%),
+                linear-gradient(180deg, #0d1628 0%, #0b1220 42%, #08111f 100%) !important;
+            color: #eaf2ff !important;
+        }
+
+        body.body--dark .q-drawer,
+        body.body--dark .q-drawer__content {
+            background: #0f172a !important;
+            color: #eaf2ff !important;
+            border-color: rgba(148, 163, 184, 0.16) !important;
+        }
+
+        body.body--dark .glass-panel {
+            background: rgba(37, 99, 235, 0.78) !important;
+            border-bottom: 1px solid rgba(191, 219, 254, 0.22) !important;
+            backdrop-filter: blur(16px);
         }
 
         body.body--dark .q-card,
         body.body--dark .modern-card,
         body.body--dark .m3-card {
-            background: #111827 !important;
-            border-color: #263449 !important;
-            color: #e5eefb !important;
+            background: #111c2f !important;
+            border-color: rgba(148, 163, 184, 0.18) !important;
+            color: #eaf2ff !important;
         }
 
         body.body--dark .text-slate-900,
@@ -165,23 +191,111 @@ def _inject_theme_styles():
         body.body--dark .text-slate-500,
         body.body--dark .text-gray-500,
         body.body--dark .text-on-surface-variant {
-            color: #94a3b8 !important;
+            color: #9fb0c8 !important;
         }
 
         body.body--dark .bg-white,
         body.body--dark .bg-slate-50 {
-            background: #111827 !important;
+            background: #111c2f !important;
+        }
+
+        body.body--dark .bg-blue-50 {
+            background: rgba(37, 99, 235, 0.18) !important;
+        }
+
+        body.body--dark .hover\\:bg-slate-50:hover,
+        body.body--dark .hover\\:bg-gray-50:hover {
+            background: rgba(148, 163, 184, 0.10) !important;
+        }
+
+        body.body--dark .text-blue-700,
+        body.body--dark .text-blue-600,
+        body.body--dark .text-primary {
+            color: #60a5fa !important;
         }
 
         body.body--dark .border-slate-100,
         body.body--dark .border-slate-200,
         body.body--dark .border-surface-variant {
-            border-color: #263449 !important;
+            border-color: rgba(148, 163, 184, 0.18) !important;
         }
 
         body.body--dark .q-field__control {
-            background: #0f172a !important;
-            color: #e5eefb !important;
+            background: #0d1628 !important;
+            color: #eaf2ff !important;
+            border-color: rgba(148, 163, 184, 0.24) !important;
+        }
+
+        body.body--dark .q-field__native,
+        body.body--dark .q-field__label {
+            color: #dbeafe !important;
+        }
+
+        body.body--dark .q-footer {
+            background: #08111f !important;
+            border-color: rgba(148, 163, 184, 0.18) !important;
+        }
+
+        .account-menu {
+            min-width: 220px !important;
+            background: rgba(255, 255, 255, 0.96) !important;
+            backdrop-filter: blur(16px);
+            margin-top: 8px !important;
+            overflow: hidden;
+        }
+
+        .account-menu-item {
+            min-height: 44px !important;
+            border-radius: 12px;
+            padding: 8px 10px !important;
+            color: #334155;
+            transition: background 0.18s ease, color 0.18s ease;
+        }
+
+        .account-menu-item:hover {
+            background: #f1f5f9 !important;
+        }
+
+        .account-menu-icon {
+            color: #64748b;
+        }
+
+        .account-menu-label {
+            color: #334155;
+            font-size: 14px;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .account-menu-danger .account-menu-icon,
+        .account-menu-danger .account-menu-label {
+            color: #ef4444 !important;
+        }
+
+        .account-menu-danger:hover {
+            background: #fef2f2 !important;
+        }
+
+        body.body--dark .account-menu {
+            background: #111c2f !important;
+            border-color: rgba(148, 163, 184, 0.18) !important;
+        }
+
+        body.body--dark .account-menu-item {
+            color: #eaf2ff !important;
+        }
+
+        body.body--dark .account-menu-item:hover {
+            background: rgba(148, 163, 184, 0.10) !important;
+        }
+
+        body.body--dark .account-menu-icon,
+        body.body--dark .account-menu-label {
+            color: #dbeafe;
+        }
+
+        body.body--dark .account-menu-danger:hover {
+            background: rgba(239, 68, 68, 0.12) !important;
         }
     </style>
     """)
@@ -415,13 +529,8 @@ def _open_settings_dialog():
     }
     role = get_user_role()
     user_settings = _get_ui_settings()
-    selected_language = user_settings.get("language", "vi")
     selected_theme = user_settings.get("theme", "light")
 
-    language_options = {
-        "vi": "Tiếng Việt",
-        "en": "English",
-    }
     theme_options = {
         "light": "Chế độ sáng",
         "dark": "Chế độ tối",
@@ -476,18 +585,6 @@ def _open_settings_dialog():
                                 ui.label("Thông báo realtime").classes("font-bold text-slate-800")
                                 ui.label("Nhận cập nhật khi yêu cầu thay đổi").classes("text-xs text-slate-400")
                         ui.switch(value=True).props("color=primary")
-
-                    with ui.row().classes("w-full items-center gap-3 rounded-2xl border border-slate-100 px-4 py-3"):
-                        with ui.row().classes("items-center gap-3"):
-                            ui.icon("language").classes("text-blue-600")
-                            with ui.column().classes("gap-0"):
-                                ui.label("Ngôn ngữ").classes("font-bold text-slate-800")
-                                ui.label("Language / Ngôn ngữ").classes("text-xs text-slate-400")
-                        ui.select(
-                            options=language_options,
-                            value=selected_language,
-                            on_change=lambda e: _save_setting("language", e.value),
-                        ).props("outlined dense rounded").classes("ml-auto w-40")
 
                     with ui.row().classes("w-full items-center gap-3 rounded-2xl border border-slate-100 px-4 py-3"):
                         with ui.row().classes("items-center gap-3"):

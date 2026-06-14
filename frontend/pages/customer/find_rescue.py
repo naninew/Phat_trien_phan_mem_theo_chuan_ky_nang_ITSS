@@ -190,7 +190,7 @@ def create_find_rescue_page():
                                                 gps_status_label,
                                                 gps_status_icon,
                                                 gps_button,
-                                                m.id,
+                                                m,
                                                 summary_address,
                                             ),
                                         ).classes(
@@ -381,54 +381,31 @@ def create_find_rescue_page():
             except Exception:
                 pass
 
-        async def _sync_user_marker(map_id, lat, lng):
-            await ui.run_javascript(f"""
-                (function() {{
-                    var latlng = [{lat}, {lng}];
-                    var markerKey = '__rescueUserMarker_{map_id}';
-                    var attempts = 0;
+        async def _sync_user_marker(map_widget, lat, lng):
+            await map_widget.initialized()
+            if state.get('user_marker') is not None:
+                try:
+                    map_widget.remove_layer(state['user_marker'])
+                except Exception:
+                    pass
 
-                    function syncMarker() {{
-                        attempts += 1;
-                        var el = getElement({map_id});
-                        var map = el && (el._leaflet_map || el.leaflet || el._map);
-                        if (!map || typeof L === 'undefined') {{
-                            if (attempts < 12) setTimeout(syncMarker, 120);
-                            return;
-                        }}
+            state['user_marker'] = map_widget.generic_layer(
+                name='circleMarker',
+                args=[
+                    {'lat': lat, 'lng': lng},
+                    {
+                        'radius': 10,
+                        'color': '#ffffff',
+                        'weight': 3,
+                        'fillColor': '#2563eb',
+                        'fillOpacity': 1,
+                    },
+                ],
+            )
+            map_widget.run_map_method('setView', (lat, lng), 16)
+            map_widget.run_map_method('invalidateSize')
 
-                        map.invalidateSize();
-
-                        var markerOptions = {{}};
-                        try {{
-                            markerOptions.icon = L.icon({{
-                                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-                                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-                                iconSize: [25, 41],
-                                iconAnchor: [12, 41],
-                                popupAnchor: [1, -34],
-                                shadowSize: [41, 41]
-                            }});
-                        }} catch (e) {{}}
-
-                        if (window[markerKey]) {{
-                            window[markerKey].setLatLng(latlng);
-                            if (markerOptions.icon) window[markerKey].setIcon(markerOptions.icon);
-                        }} else {{
-                            window[markerKey] = L.marker(latlng, markerOptions).addTo(map);
-                        }}
-
-                        window[markerKey].options.title = 'Vị trí hiện tại của bạn';
-
-                        map.setView(latlng, Math.max(map.getZoom() || 13, 16), {{ animate: true }});
-                        setTimeout(function() {{ map.invalidateSize(); }}, 250);
-                    }}
-
-                    syncMarker();
-                }})();
-            """, timeout=5.0)
-
-        async def _get_gps(address_label, gps_status_label, gps_status_icon, gps_button, map_id, summary_address):
+        async def _get_gps(address_label, gps_status_label, gps_status_icon, gps_button, map_widget, summary_address):
             try:
                 gps_button.props("loading")
                 gps_status_icon.props("name=sync")
@@ -467,9 +444,18 @@ def create_find_rescue_page():
                     state['lat'] = pos['lat']
                     state['lng'] = pos['lng']
 
-                    await _sync_user_marker(map_id, pos['lat'], pos['lng'])
+                    try:
+                        await _sync_user_marker(map_widget, pos['lat'], pos['lng'])
+                    except Exception:
+                        pass
 
-                    address = await get_location_text(pos['lat'], pos['lng'])
+                    fallback_address = f"Vĩ độ {pos['lat']:.6f}, kinh độ {pos['lng']:.6f}"
+                    try:
+                        address = await get_location_text(pos['lat'], pos['lng'])
+                    except Exception:
+                        address = fallback_address
+                    if not address or address == "Không xác định vị trí":
+                        address = fallback_address
                     state['address'] = address
                     gps_status_icon.props("name=check_circle")
                     gps_status_icon.classes(remove="text-blue-600 text-slate-400 text-red-500")

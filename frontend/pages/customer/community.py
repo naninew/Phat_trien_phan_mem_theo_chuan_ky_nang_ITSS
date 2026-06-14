@@ -499,6 +499,87 @@ def create_community_page():
                 background: #ffffff;
                 box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.04);
             }
+            body.body--dark .community-page {
+                color: #eaf2ff;
+            }
+            body.body--dark .community-title,
+            body.body--dark .post-title-modern,
+            body.body--dark .panel-title {
+                color: #f8fbff !important;
+            }
+            body.body--dark .community-subtitle,
+            body.body--dark .post-excerpt,
+            body.body--dark .comment-pill {
+                color: #a8b7cf !important;
+            }
+            body.body--dark .community-toolbar,
+            body.body--dark .community-panel,
+            body.body--dark .feed-card {
+                background: rgba(17, 28, 47, 0.96) !important;
+                border-color: rgba(148, 163, 184, 0.18) !important;
+                box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22) !important;
+            }
+            body.body--dark .feed-card:hover {
+                border-color: rgba(96, 165, 250, 0.46) !important;
+                box-shadow: 0 18px 42px rgba(0, 0, 0, 0.30) !important;
+            }
+            body.body--dark .topic-tab-idle {
+                background: rgba(15, 23, 42, 0.86) !important;
+                color: #c8d5e8 !important;
+                border-color: rgba(148, 163, 184, 0.24) !important;
+            }
+            body.body--dark .topic-tab-idle:hover {
+                background: rgba(37, 99, 235, 0.18) !important;
+                color: #93c5fd !important;
+                border-color: rgba(96, 165, 250, 0.38) !important;
+            }
+            body.body--dark .topic-tab-active,
+            body.body--dark .create-post-btn {
+                background: linear-gradient(135deg, #2563eb, #3b82f6) !important;
+                color: #ffffff !important;
+                box-shadow: 0 12px 26px rgba(37, 99, 235, 0.28) !important;
+            }
+            body.body--dark .panel-heading-blue,
+            body.body--dark .panel-heading-emerald,
+            body.body--dark .panel-heading-amber,
+            body.body--dark .panel-heading-slate,
+            body.body--dark .posting-tip,
+            body.body--dark .reply-card,
+            body.body--dark .image-preview-box,
+            body.body--dark .post-detail-image,
+            body.body--dark .comment-box {
+                background: rgba(13, 22, 40, 0.92) !important;
+                border-color: rgba(148, 163, 184, 0.20) !important;
+                color: #eaf2ff !important;
+            }
+            body.body--dark .panel-heading-icon,
+            body.body--dark .panel-heading-icon-blue,
+            body.body--dark .panel-heading-icon-emerald,
+            body.body--dark .panel-heading-icon-amber,
+            body.body--dark .panel-heading-icon-slate,
+            body.body--dark .rank-number,
+            body.body--dark .sidebar-avatar {
+                background: rgba(37, 99, 235, 0.14) !important;
+                box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.28) !important;
+                color: #93c5fd !important;
+            }
+            body.body--dark .rank-row:hover {
+                background: rgba(148, 163, 184, 0.09) !important;
+                border-color: rgba(148, 163, 184, 0.18) !important;
+            }
+            body.body--dark .status-resolved-badge {
+                background: rgba(22, 101, 52, 0.22) !important;
+                border-color: rgba(74, 222, 128, 0.36) !important;
+                color: #bbf7d0 !important;
+            }
+            body.body--dark .post-thumb {
+                border-color: rgba(148, 163, 184, 0.22) !important;
+            }
+            body.body--dark .community-toolbar .q-field__control,
+            body.body--dark .community-toolbar .q-field__native,
+            body.body--dark .community-toolbar .q-field__label {
+                color: #eaf2ff !important;
+            }
             @media (max-width: 1180px) {
                 .community-grid {
                     flex-direction: column;

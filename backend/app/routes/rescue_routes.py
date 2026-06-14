@@ -4,6 +4,8 @@ Rescue routes – đầy đủ endpoints cho customer, company staff và admin.
 # pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 # pyrefly: ignore [missing-import]
+from sqlalchemy import func
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from datetime import datetime, timedelta
@@ -29,6 +31,7 @@ from app.services import rescue_svc, auth_svc, chat_svc
 from app.utils.response import success_response
 from app.models.company import RescueCompany
 from app.models.service import Service
+from app.models.request import RequestService
 
 
 router = APIRouter(prefix="/rescue", tags=["Rescue Services"])
@@ -136,6 +139,16 @@ def list_company_services(
         raise HTTPException(status_code=404, detail="Không tìm thấy profile công ty")
         
     services = rescue_svc.get_services_by_company(db, company.id)
+    service_counts = dict(
+        db.query(
+            RequestService.service_id,
+            func.coalesce(func.sum(RequestService.quantity), 0),
+        )
+        .join(Service, RequestService.service_id == Service.id)
+        .filter(Service.company_id == company.id)
+        .group_by(RequestService.service_id)
+        .all()
+    )
     return success_response(
         data=[
             {
@@ -145,7 +158,9 @@ def list_company_services(
                 "description": s.description,
                 "base_price": s.base_price,
                 "estimated_duration": s.estimated_duration,
-                "is_active": s.is_active
+                "is_active": s.is_active,
+                "usage_count": int(service_counts.get(s.id, 0)),
+                "request_count": int(service_counts.get(s.id, 0)),
             }
             for s in services
         ],
@@ -1106,6 +1121,7 @@ def get_company_full_details(
     for rev in reviews:
         reviews_data.append({
             "customer_name": rev.user.full_name,
+            "customer_avatar_url": rev.user.avatar_url,
             "rating": rev.rating,
             "comment": rev.comment,
             "created_at": rev.created_at.isoformat()
