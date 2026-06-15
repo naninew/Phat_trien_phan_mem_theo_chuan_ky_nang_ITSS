@@ -55,16 +55,44 @@ def create_find_rescue_page():
             'address': "",
             'issue_detail': "",
             'selected_company': None,
-            'companies': []
+            'companies': [],
+            'company_sort': 'recommended',
+            'submitting': False,
         }
 
         def vehicle_fuel_label(vehicle: Dict[str, Any]) -> str:
             return vehicle.get('fuel_type') or vehicle.get('fuel') or 'Chưa cập nhật'
 
         with page_layout("/customer/find-rescue", title="Yêu Cầu Cứu Hộ"):
+            ui.add_head_html("""
+            <style>
+                .rescue-stepper .q-stepper__header {
+                    border-bottom: 1px solid #e2e8f0;
+                    padding: 8px 10px 12px;
+                    gap: 6px;
+                }
+                .rescue-stepper .q-stepper__line:before,
+                .rescue-stepper .q-stepper__line:after {
+                    height: 1px !important;
+                    background: #cbd5e1 !important;
+                }
+                .rescue-stepper .q-stepper__tab--active .q-stepper__dot {
+                    background: #2563eb !important;
+                    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.28);
+                    transform: scale(1.08);
+                }
+                .rescue-stepper .q-stepper__tab--active .q-stepper__title {
+                    color: #1d4ed8 !important;
+                    font-weight: 800 !important;
+                }
+                .rescue-stepper .q-stepper__dot {
+                    transition: all 0.2s ease;
+                }
+            </style>
+            """)
             
             with ui.stepper().classes(
-                'w-full rounded-3xl bg-white/70 p-4 shadow-sm border border-gray-100'
+                'rescue-stepper w-full rounded-2xl bg-white/80 p-4 shadow-sm border border-slate-100'
             ).props('flat animated') as stepper:
                 # ── STEP 1: CHỌN XE ───────────────────────────────────────────
                 with ui.step('Chọn Xe'):
@@ -125,7 +153,11 @@ def create_find_rescue_page():
                 # ── STEP 2: VỊ TRÍ & DỊCH VỤ ──────────────────────────────────
                 with ui.step('Vị trí & Sự cố'):
                     services = await get_services()
-                    service_mapping = {s['id']: s['service_name'] for s in services}
+                    service_mapping = {}
+                    for s in services:
+                        service_name = (s.get('service_name') or '').strip()
+                        if service_name and service_name not in service_mapping:
+                            service_mapping[service_name] = service_name
 
                     with ui.column().classes('w-full gap-5'):
                         with ui.row().classes('w-full items-start justify-between gap-4'):
@@ -336,13 +368,31 @@ def create_find_rescue_page():
 
                 # ── STEP 3: CHỌN ĐƠN VỊ ────────────────────────────────────────
                 with ui.step('Chọn Đơn Vị'):
-                    with ui.column().classes('w-full gap-6'):
-                        # Header
-                        ui.label('Danh sách các đơn vị cứu hộ gần bạn').classes('text-2xl font-bold text-primary')
-                        ui.label('Chọn đơn vị phù hợp nhất dựa trên khoảng cách, thời gian, và giá cước').classes('text-sm text-gray-600 mb-2')
+                    with ui.column().classes('w-full gap-4'):
+                        with ui.row().classes(
+                            'w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 '
+                            'bg-white px-5 py-4 shadow-sm'
+                        ):
+                            with ui.column().classes('gap-1'):
+                                ui.label('Chọn đơn vị cứu hộ').classes(
+                                    'text-2xl font-bold text-slate-900 font-outfit'
+                                )
+                                results_count_label = ui.label('Chưa có đơn vị phù hợp').classes(
+                                    'text-sm font-semibold text-slate-500'
+                                )
+                            sort_select = ui.select(
+                                options={
+                                    'recommended': 'Đề xuất tốt nhất',
+                                    'nearest': 'Gần nhất',
+                                    'price': 'Giá thấp nhất',
+                                    'rating': 'Đánh giá cao nhất',
+                                },
+                                value='recommended',
+                                label='Sắp xếp',
+                            ).classes('w-full sm:w-[240px]').props('outlined dense rounded')
                         
                         # Companies Container
-                        companies_container = ui.column().classes('w-full gap-4')
+                        companies_container = ui.column().classes('w-full gap-3')
                     
                     with ui.stepper_navigation():
                         ui.button('Tìm lại', on_click=stepper.previous).classes(
@@ -351,21 +401,39 @@ def create_find_rescue_page():
 
                 # ── STEP 4: XÁC NHẬN ──────────────────────────────────────────
                 with ui.step('Xác Nhận'):
-                    with ui.column().classes('w-full gap-6'):
+                    with ui.column().classes('w-full gap-4'):
                         # Header
-                        ui.label('Xác nhận yêu cầu cứu hộ').classes('text-2xl font-bold text-primary')
-                        ui.label('Kiểm tra thông tin trước khi gửi yêu cầu').classes('text-sm text-gray-600 mb-2')
+                        with ui.row().classes('w-full items-center justify-between gap-3'):
+                            with ui.column().classes('gap-1'):
+                                ui.label('Xác nhận yêu cầu cứu hộ').classes(
+                                    'text-2xl font-black text-slate-900 font-outfit'
+                                )
+                                ui.label('Kiểm tra thông tin trước khi gửi yêu cầu').classes(
+                                    'text-sm font-semibold text-slate-500'
+                                )
                         
                         # Summary Container
-                        summary_container = ui.column().classes('w-full gap-4 p-6 bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl border-2 border-blue-200')
+                        summary_container = ui.column().classes(
+                            'w-full gap-4 rounded-2xl border border-blue-100 bg-gradient-to-br '
+                            'from-blue-50 via-white to-cyan-50 p-4 sm:p-6 shadow-sm'
+                        )
                     
                     with ui.stepper_navigation():
-                        ui.button('GỬI YÊU CẦU', on_click=lambda: _do_submit()).classes(
-                            'bg-green-600 text-white font-bold px-10 py-4 rounded-lg shadow-lg hover:bg-green-700 transition-all'
-                        )
-                        ui.button('Quay lại', on_click=stepper.previous).classes(
-                            'px-8 py-3 rounded-lg font-bold border border-gray-300 text-gray-700'
-                        )
+                        with ui.row().classes(
+                            'w-full flex-col items-stretch justify-end gap-3 rounded-2xl border border-slate-100 '
+                            'bg-white px-4 py-4 shadow-sm'
+                            ' sm:flex-row sm:items-center'
+                        ):
+                            ui.button('Quay lại', icon='arrow_back', on_click=stepper.previous).classes(
+                                'h-12 w-full min-w-[150px] rounded-2xl border border-blue-600 bg-white px-6 '
+                                'text-sm font-bold text-blue-700 shadow-sm transition-all hover:bg-blue-50 '
+                                'active:scale-[0.98] sm:w-auto'
+                            ).props('outline unelevated no-caps')
+                            submit_button = ui.button('Gửi yêu cầu', icon='send', on_click=lambda: _do_submit()).classes(
+                                'h-12 w-full min-w-[180px] rounded-2xl bg-blue-700 px-6 text-sm font-black '
+                                'text-white shadow-lg shadow-blue-200 transition-all hover:bg-blue-800 '
+                                'active:scale-[0.98] disabled:opacity-60 disabled:shadow-none sm:w-auto'
+                            ).props('unelevated no-caps')
 
         # --- Helper Logic ---
         async def _invalidate_map_size(map_id):
@@ -474,6 +542,179 @@ def create_find_rescue_page():
                 ui.notify(f"Không thể lấy GPS: {str(e)}", type='negative')
             finally:
                 gps_button.props(remove="loading")
+
+        def _format_price(value: float) -> str:
+            return f"{float(value or 0):,.0f} đ"
+
+        def _company_initials(company_name: str) -> str:
+            words = [word[0] for word in (company_name or "").split() if word]
+            return "".join(words[:2]).upper() or "CH"
+
+        def _sorted_companies(companies: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            sort_key = state.get('company_sort') or 'recommended'
+            if sort_key == 'nearest':
+                return sorted(companies, key=lambda c: float(c.get('distance_km') or 9999))
+            if sort_key == 'price':
+                return sorted(companies, key=lambda c: float(c.get('estimated_price') or 0))
+            if sort_key == 'rating':
+                return sorted(companies, key=lambda c: float(c.get('rating_avg') or 0), reverse=True)
+            return sorted(
+                companies,
+                key=lambda c: (
+                    float(c.get('estimated_price') or 0),
+                    float(c.get('eta_minutes') or 9999),
+                    float(c.get('distance_km') or 9999),
+                    -float(c.get('rating_avg') or 0),
+                ),
+            )
+
+        def _company_tags(company: Dict[str, Any], companies: List[Dict[str, Any]], index: int) -> List[Dict[str, str]]:
+            if not companies:
+                return []
+            min_distance = min(float(c.get('distance_km') or 9999) for c in companies)
+            min_eta = min(float(c.get('eta_minutes') or 9999) for c in companies)
+            min_price = min(float(c.get('estimated_price') or 0) for c in companies)
+            tags = []
+            if index == 0:
+                tags.append({'label': 'Đề xuất', 'classes': 'bg-blue-600 text-white'})
+            if float(company.get('distance_km') or 9999) == min_distance:
+                tags.append({'label': 'Gần nhất', 'classes': 'bg-cyan-50 text-cyan-700 border border-cyan-100'})
+            if float(company.get('eta_minutes') or 9999) == min_eta:
+                tags.append({'label': 'Đến nhanh', 'classes': 'bg-emerald-50 text-emerald-700 border border-emerald-100'})
+            if float(company.get('estimated_price') or 0) == min_price:
+                tags.append({'label': 'Giá tốt', 'classes': 'bg-amber-50 text-amber-700 border border-amber-100'})
+            return tags[:4]
+
+        def _show_company_detail(company: Dict[str, Any]):
+            with ui.dialog() as dialog, ui.card().classes(
+                'w-[min(92vw,640px)] rounded-2xl p-0 overflow-hidden'
+            ).props('flat'):
+                with ui.element('div').classes(
+                    'w-full bg-gradient-to-r from-blue-700 via-blue-600 to-cyan-500 px-5 py-4 text-white'
+                ):
+                    with ui.row().classes('w-full items-center gap-3'):
+                        with ui.element('div').classes(
+                            'h-12 w-12 min-w-[48px] rounded-2xl bg-white/20 flex items-center justify-center text-lg font-black shadow-sm'
+                        ):
+                            ui.label(_company_initials(company.get('company_name', ''))).classes('text-white')
+                        with ui.column().classes('gap-0 flex-1'):
+                            ui.label(company.get('company_name', 'Đơn vị cứu hộ')).classes('text-lg font-bold')
+                            ui.label(company.get('address') or 'Chưa cập nhật địa chỉ').classes('text-xs text-white/70')
+                with ui.column().classes('w-full gap-4 p-5'):
+                    with ui.element('div').classes('grid w-full grid-cols-3 gap-3'):
+                        for icon, label, value, color in [
+                            ('star', 'Đánh giá', f"{float(company.get('rating_avg') or 0):.1f}", 'text-amber-500'),
+                            ('near_me', 'Khoảng cách', f"{company.get('distance_km', 0)} km", 'text-blue-600'),
+                            ('payments', 'Giá dự kiến', _format_price(company.get('estimated_price')), 'text-emerald-600'),
+                        ]:
+                            with ui.element('div').classes('min-w-0 rounded-2xl bg-slate-50 p-3'):
+                                ui.icon(icon, size='1.2rem').classes(color)
+                                ui.label(label).classes('mt-1 text-xs font-bold uppercase text-slate-400')
+                                ui.label(value).classes('text-sm font-bold text-slate-900')
+                    with ui.column().classes('w-full gap-2'):
+                        ui.label('Dịch vụ phù hợp').classes('text-xs font-bold uppercase text-slate-400')
+                        for service in company.get('services', []):
+                            with ui.row().classes('w-full items-center justify-between rounded-xl bg-blue-50 px-3 py-2'):
+                                ui.label(service.get('service_name') or state.get('service_name')).classes('text-sm font-bold text-slate-800')
+                                ui.label(_format_price(service.get('base_price'))).classes('text-sm font-bold text-blue-700')
+                    with ui.row().classes('w-full justify-end gap-2 pt-2'):
+                        ui.button('Đóng', on_click=dialog.close).classes(
+                            'rounded-xl px-4 py-2 font-bold text-slate-600'
+                        ).props('flat')
+                        ui.button('Chọn đơn vị', icon='check_circle', on_click=lambda: (dialog.close(), _select_company(stepper, company))).classes(
+                            'rounded-xl bg-blue-600 px-4 py-2 font-bold text-white hover:bg-blue-700'
+                        ).props('unelevated')
+            dialog.open()
+
+        def _render_company_cards():
+            companies_container.clear()
+            companies = _sorted_companies(state.get('companies', []))
+            results_count_label.set_text(f"Tìm thấy {len(companies)} đơn vị cung cấp {state.get('service_name')}")
+            with companies_container:
+                if not companies:
+                    with ui.element('div').classes(
+                        'w-full rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center'
+                    ):
+                        ui.icon('info', size='lg').classes('text-amber-600')
+                        ui.label('Không tìm thấy đơn vị nào phù hợp').classes('mt-2 font-bold text-slate-800')
+                        ui.label('Vui lòng thử thay đổi vị trí hoặc loại sự cố').classes('text-sm text-slate-600')
+                    return
+
+                for index, company in enumerate(companies):
+                    is_best = index == 0
+                    wrapper_classes = (
+                        'w-full rounded-[16px] p-[1px] transition-all duration-200 hover:-translate-y-0.5 '
+                        + ('bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-400 shadow-xl shadow-blue-200/70'
+                           if is_best else 'bg-slate-200 shadow-md shadow-slate-200/60 hover:shadow-lg')
+                    )
+                    inner_classes = (
+                        'relative w-full rounded-[15px] px-4 pb-3 sm:px-5 sm:pb-4 '
+                        + ('pt-12 sm:pt-4 ' if is_best else 'pt-3 sm:pt-4 ')
+                        + ('bg-gradient-to-br from-blue-50 via-white to-cyan-50' if is_best else 'bg-white')
+                    )
+                    with ui.element('div').classes(wrapper_classes):
+                        with ui.element('div').classes(inner_classes):
+                            if is_best:
+                                ui.label('🏆 Đề xuất tốt nhất').classes(
+                                    'absolute right-4 top-3 rounded-full bg-blue-600 px-3 py-1 text-xs font-black text-white shadow-lg'
+                                )
+                            with ui.row().classes('w-full items-start gap-3 pr-0 sm:pr-36'):
+                                with ui.element('div').classes(
+                                    'h-[52px] w-[52px] min-w-[52px] rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center shadow-sm shadow-blue-200'
+                                ):
+                                    ui.label(_company_initials(company.get('company_name', ''))).classes(
+                                        'text-base font-black text-white'
+                                    )
+                                with ui.column().classes('min-w-0 flex-1 gap-1'):
+                                    ui.label(company.get('company_name', 'Đơn vị cứu hộ')).classes(
+                                        'text-base sm:text-lg font-black text-slate-900 leading-tight'
+                                    )
+                                    with ui.row().classes('items-center gap-1'):
+                                        rating = float(company.get('rating_avg') or 0)
+                                        filled_stars = max(0, min(5, int(round(rating))))
+                                        for star_index in range(5):
+                                            ui.icon('star', size='1rem').classes(
+                                                'text-amber-400' if star_index < filled_stars else 'text-slate-200'
+                                            )
+                                        ui.label(f"{rating:.1f}").classes('ml-1 text-sm font-bold text-slate-700')
+                                        ui.label(f"({int(company.get('rating_count') or 0)})").classes('text-xs text-slate-400')
+                                    with ui.row().classes('mt-1 gap-1.5 flex-wrap'):
+                                        for tag in _company_tags(company, companies, index):
+                                            ui.label(tag['label']).classes(
+                                                f"rounded-full px-2.5 py-1 text-xs font-bold {tag['classes']}"
+                                            )
+
+                            with ui.element('div').classes('mt-3 grid w-full grid-cols-3 gap-2'):
+                                for icon, label, value, color in [
+                                    ('near_me', 'Khoảng cách', f"{company.get('distance_km', 0)} km", 'text-blue-600'),
+                                    ('schedule', 'ETA', f"{company.get('eta_minutes', 0)} phút", 'text-violet-600'),
+                                    ('payments', 'Giá dự kiến', _format_price(company.get('estimated_price')), 'text-emerald-600'),
+                                ]:
+                                    with ui.element('div').classes(
+                                        'min-w-0 rounded-xl border border-slate-100 bg-white/85 px-2 py-2 sm:px-3 shadow-sm'
+                                    ):
+                                        with ui.row().classes('items-center gap-1.5'):
+                                            ui.icon(icon, size='1rem').classes(color)
+                                            ui.label(label).classes('text-[10px] sm:text-[11px] font-bold uppercase text-slate-400')
+                                        ui.label(value).classes('mt-1 text-xs sm:text-sm font-black text-slate-900')
+
+                            with ui.row().classes('mt-3 w-full items-center justify-between gap-2 border-t border-slate-100 pt-3'):
+                                ui.label(company.get('hotline') or 'Hotline chưa cập nhật').classes(
+                                    'text-xs font-semibold text-slate-500'
+                                )
+                                with ui.row().classes('gap-2'):
+                                    ui.button('Xem chi tiết', icon='visibility', on_click=lambda company=company: _show_company_detail(company)).classes(
+                                        'rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50'
+                                    ).props('flat')
+                                    ui.button('Chọn đơn vị', icon='check_circle', on_click=lambda company=company: _select_company(stepper, company)).classes(
+                                        'rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700'
+                                    ).props('unelevated')
+
+        sort_select.on(
+            'update:model-value',
+            lambda: (state.update({'company_sort': sort_select.value}), _render_company_cards()),
+        )
+
         # Tìm kiếm công ty 
         async def _search_companies(stepper, svc_id, issue, lat, lng):
             if not svc_id or not issue:
@@ -484,54 +725,43 @@ def create_find_rescue_page():
                 return
             
             # Get service name from mapping
-            svc_name = service_mapping.get(svc_id, 'Không xác định')
-            state.update({'service_id': svc_id, 'service_name': svc_name, 'issue_detail': issue, 'lat': lat, 'lng': lng})
+            svc_name = service_mapping.get(svc_id, svc_id or 'Không xác định')
+            state.update({'service_id': None, 'service_name': svc_name, 'issue_detail': issue, 'lat': lat, 'lng': lng})
             
-            service_ids = [svc_id]  # Convert to list for API
             companies_container.clear()
             with companies_container:
                 loading = ui.spinner(size='lg').classes('self-center')
                 loading.delete()
             res= None
             try:
-                res = await find_nearby_companies(lat, lng, service_ids)
+                res = await find_nearby_companies(lat, lng, service_names=[svc_name])
             except Exception as e:
                 companies_container.clear()
                 ui.notify(f"Lỗi API: {e}", type='negative')
                 return
             if not res:
-                    with companies_container:
-                        with ui.card().classes('w-full p-8 rounded-2xl bg-yellow-50 border-2 border-yellow-200'):
-                            with ui.column().classes('items-center gap-4'):
-                                ui.icon('info', size='lg').classes('text-yellow-600')
-                                ui.label('Không tìm thấy đơn vị nào phù hợp').classes('font-bold text-gray-700')
-                                ui.label('Vui lòng thử thay đổi vị trí hoặc loại sự cố').classes('text-sm text-gray-600')
-                        return
+                state['companies'] = []
+                stepper.next()
+                _render_company_cards()
+                return
+            state['companies'] = res
+            state['company_sort'] = sort_select.value or 'recommended'
             stepper.next()
-            with companies_container:
-                for c in res:
-                    with ui.card().classes(
-                        'w-full p-6 rounded-2xl border-2 border-gray-200 hover:border-primary hover:shadow-lg '
-                        'cursor-pointer transition-all bg-white'
-                    ).on('click', lambda c=c: _select_company(stepper, c)):
-                        with ui.row().classes('w-full justify-between items-start mb-4'):
-                            with ui.column().classes('gap-2'):
-                                ui.label(c['company_name']).classes('font-bold text-lg text-primary')
-                                with ui.row().classes('gap-2 text-sm text-gray-600'):
-                                    ui.icon('location_on', size='sm').classes('text-red-500')
-                                    ui.label(f"{c['distance_km']} km")
-                                    ui.label('•')
-                                    ui.icon('schedule', size='sm').classes('text-blue-500')
-                                    ui.label(f"{c['eta_minutes']} phút")
-                            with ui.column().classes('items-end gap-1'):
-                                with ui.row().classes('items-center gap-1'):
-                                    ui.icon('star', size='md').classes('text-yellow-500')
-                                    ui.label(f"{c['rating_avg']:.1f}").classes('font-bold')
-                        with ui.row().classes('w-full justify-between items-center pt-4 border-t border-gray-200'):
-                            ui.label('Giá dự kiến').classes('text-sm text-gray-600')
-                            ui.label(f"{c['estimated_price']:,.0f} đ").classes('font-bold text-lg text-green-600')
+            _render_company_cards()
 
         def _select_company(stepper, c):
+            matched_svc = next(
+                (
+                    s
+                    for s in c.get('services', [])
+                    if (s.get('service_name') or '').strip() == state.get('service_name')
+                ),
+                None,
+            )
+            if not matched_svc:
+                ui.notify("Công ty này chưa có dịch vụ phù hợp", type='negative')
+                return
+            state['service_id'] = matched_svc['id']
             state['selected_company'] = c
             _render_summary()
             stepper.next()
@@ -550,56 +780,87 @@ def create_find_rescue_page():
                     ui.label("❌ Chưa chọn công ty. Vui lòng chọn lại.").classes("text-error text-sm")
                     return
                 
-                # Vehicle Info
-                with ui.card().classes('w-full p-4 rounded-xl bg-white border border-gray-200'):
-                    with ui.row().classes('w-full items-center gap-4'):
-                        ui.icon('directions_car', size='lg').classes('text-primary')
-                        with ui.column().classes('gap-1'):
-                            ui.label('Phương tiện').classes('text-sm text-gray-600 font-bold')
-                            ui.label(f"{state['selected_vehicle']['license_plate']} - {state['selected_vehicle']['brand']} {state['selected_vehicle']['model']}").classes('font-bold')
-                
-                # Service & Issue Info
-                with ui.card().classes('w-full p-4 rounded-xl bg-white border border-gray-200'):
-                    with ui.row().classes('w-full items-start gap-4'):
-                        ui.icon('build', size='lg').classes('text-warning')
-                        with ui.column().classes('gap-1 flex-1'):
-                            ui.label('Loại sự cố').classes('text-sm text-gray-600 font-bold')
-                            ui.label(state['service_name']).classes('font-bold')
-                            ui.label(f"Mô tả: {state['issue_detail']}").classes('text-sm text-gray-700 mt-2')
-                
-                # Company & Price Info
-                with ui.card().classes('w-full p-4 rounded-xl bg-white border border-gray-200'):
-                    with ui.row().classes('w-full items-center gap-4'):
-                        ui.icon('business', size='lg').classes('text-info')
-                        with ui.column().classes('gap-1 flex-1'):
-                            ui.label('Đơn vị cứu hộ').classes('text-sm text-gray-600 font-bold')
-                            ui.label(state['selected_company']['company_name']).classes('font-bold')
-                        # with ui.column().classes('items-end gap-1'):
-                        #     ui.label('Phí dự kiến').classes('text-sm text-gray-600 font-bold')
-                        #     ui.label(f"{state['selected_company']['estimated_price']:,.0f} đ").classes('font-bold text-lg text-green-600')
-                
-                # Total Price Summary
-                with ui.card().classes('w-full p-6 rounded-xl bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-300'):
-                    with ui.row().classes('w-full items-center justify-between'):
-                        with ui.column().classes('gap-1'):
-                            ui.label('Tổng phí dự kiến').classes('text-sm text-gray-600 font-bold')
-                            ui.label('Bao gồm phí cứu hộ').classes('text-xs text-gray-500')
-                        ui.label(f"{state['selected_company']['estimated_price']:,.0f} đ").classes(
-                            'font-bold text-4xl text-green-600'
-                        )
+                def summary_card(icon: str, title: str, primary: str, secondary: str = "", color: str = "text-blue-600"):
+                    with ui.element('div').classes(
+                        'min-h-[132px] rounded-2xl border border-slate-100 bg-white p-4 shadow-sm '
+                        'transition-shadow hover:shadow-md'
+                    ):
+                        with ui.row().classes('h-full w-full items-start gap-3'):
+                            with ui.element('div').classes(
+                                'h-11 w-11 min-w-[44px] rounded-2xl bg-blue-50 flex items-center justify-center'
+                            ):
+                                ui.icon(icon, size='1.35rem').classes(color)
+                            with ui.column().classes('min-w-0 flex-1 gap-1'):
+                                ui.label(title).classes('text-xs font-black uppercase tracking-wide text-slate-400')
+                                ui.label(primary).classes('break-words text-base font-black leading-snug text-slate-900')
+                                if secondary:
+                                    ui.label(secondary).classes('line-clamp-2 text-sm font-medium leading-snug text-slate-500')
+
+                selected_vehicle = state['selected_vehicle']
+                selected_company = state['selected_company']
+                with ui.element('div').classes('grid w-full grid-cols-1 gap-4 lg:grid-cols-3'):
+                    summary_card(
+                        'directions_car',
+                        'Phương tiện',
+                        f"{selected_vehicle['license_plate']}",
+                        f"{selected_vehicle['brand']} {selected_vehicle['model']}",
+                        'text-blue-600',
+                    )
+                    summary_card(
+                        'build_circle',
+                        'Loại sự cố',
+                        state['service_name'],
+                        state['issue_detail'],
+                        'text-amber-500',
+                    )
+                    summary_card(
+                        'business',
+                        'Đơn vị cứu hộ',
+                        selected_company['company_name'],
+                        selected_company.get('hotline') or 'Hotline chưa cập nhật',
+                        'text-cyan-600',
+                    )
+
+                with ui.element('div').classes(
+                    'w-full rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 '
+                    'via-white to-blue-50 p-4 shadow-sm sm:p-5'
+                ):
+                    with ui.row().classes('w-full items-center justify-between gap-4 flex-wrap'):
+                        with ui.row().classes('items-center gap-3'):
+                            with ui.element('div').classes(
+                                'h-12 w-12 min-w-[48px] rounded-2xl bg-emerald-100 flex items-center justify-center'
+                            ):
+                                ui.icon('payments', size='1.4rem').classes('text-emerald-700')
+                            with ui.column().classes('gap-0'):
+                                ui.label('Tổng phí dự kiến').classes('text-sm font-black uppercase text-slate-500')
+                                ui.label('Bao gồm phí cứu hộ và ước tính quãng đường').classes(
+                                    'text-xs font-medium text-slate-500'
+                                )
+                        with ui.element('div').classes('ml-auto rounded-2xl bg-white px-5 py-3 shadow-sm'):
+                            ui.label(f"{selected_company['estimated_price']:,.0f} đ").classes(
+                                'text-right text-2xl font-black text-emerald-700 sm:text-3xl'
+                            )
 
         async def _do_submit():
+            if state.get('submitting'):
+                return
             # Find service_id
             company = state['selected_company']
-            service_id = state['service_id']  # Get the actual service ID
             matched_svc = next(
-                (s for s in company['services'] if s['id'] == service_id),
+                (
+                    s
+                    for s in company['services']
+                    if (s.get('service_name') or '').strip() == state['service_name']
+                ),
                     None
                 )
-            incident_type = matched_svc['service_name']
             if not matched_svc:
                 ui.notify("Không tìm thấy dịch vụ", type='negative')
                 return
+            incident_type = matched_svc['service_name']
+            state['service_id'] = matched_svc['id']
+            state['submitting'] = True
+            submit_button.props('loading disable')
             try:
                 address = await get_location_text(
                     state['lat'],
@@ -629,3 +890,6 @@ def create_find_rescue_page():
             except Exception as e:
                 print("SUBMIT ERROR =", e)
                 ui.notify(f"Lỗi: {e}", type='negative')
+            finally:
+                state['submitting'] = False
+                submit_button.props(remove='loading disable')

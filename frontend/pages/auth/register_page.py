@@ -446,7 +446,7 @@ def create_register_page():
 
         attach_validation(c_username, c_username_valid, lambda value: len(value.strip()) >= 3)
         attach_validation(c_fullname, c_fullname_valid, lambda value: len(value.strip()) >= 2)
-        attach_validation(c_phone, c_phone_valid, lambda value: bool(re.fullmatch(r'[0-9+\-\s]{9,15}', value.strip())))
+        attach_validation(c_phone, c_phone_valid, lambda value: bool(re.fullmatch(r'[0-9+\-\s]{10,20}', value.strip())))
         attach_validation(c_email, c_email_valid, lambda value: bool(re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', value.strip())))
         configure_password(c_password, c_eye, c_strength_bar, c_strength_label, c_password_valid)
 
@@ -457,7 +457,7 @@ def create_register_page():
         attach_validation(comp_name, comp_name_valid, lambda value: len(value.strip()) >= 2)
         attach_validation(comp_license, comp_license_valid, lambda value: len(value.strip()) >= 5)
         attach_validation(comp_address, comp_address_valid, lambda value: len(value.strip()) >= 5)
-        attach_validation(comp_hotline, comp_hotline_valid, lambda value: bool(re.fullmatch(r'[0-9+\-\s]{9,15}', value.strip())))
+        attach_validation(comp_hotline, comp_hotline_valid, lambda value: bool(re.fullmatch(r'[0-9+\-\s]{10,20}', value.strip())))
 
         async def do_register_customer():
             c_error.set_text('')
@@ -472,6 +472,9 @@ def create_register_page():
             if not all(data.values()):
                 c_error.set_text('Vui lòng điền đầy đủ thông tin')
                 return
+            if not re.fullmatch(r'[0-9+\-\s]{10,20}', data["phone"]):
+                c_error.set_text('Số điện thoại phải có ít nhất 10 chữ số')
+                return
             if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', data["email"]):
                 c_error.set_text('Email chưa đúng định dạng')
                 return
@@ -479,14 +482,16 @@ def create_register_page():
                 c_error.set_text('Mật khẩu cần mạnh hơn để bảo vệ tài khoản')
                 return
             
-            c_btn.props('loading')
-            res = await AuthService.register_customer(data)
-            if res['success']:
-                ui.notify('Đăng ký thành công! Vui lòng đăng nhập.', type='positive')
-                ui.navigate.to(LOGIN_PAGE)
-            else:
-                c_error.set_text(res['message'])
-            c_btn.props(remove='loading')
+            c_btn.props('loading disable')
+            try:
+                res = await AuthService.register_customer(data)
+                if res['success']:
+                    ui.notify('Đăng ký thành công! Vui lòng đăng nhập.', type='positive')
+                    ui.navigate.to(LOGIN_PAGE)
+                else:
+                    c_error.set_text(str(res.get('message') or 'Đăng ký thất bại'))
+            finally:
+                c_btn.props(remove='loading disable')
 
         async def do_register_company():
             co_error.set_text('')
@@ -501,8 +506,12 @@ def create_register_page():
                 "hotline": (comp_hotline.value or '').strip(),
                 "role": "company_staff"
             }
+            data["phone"] = data["hotline"]
             if not all(data.values()):
                 co_error.set_text('Vui lòng điền đầy đủ thông tin')
+                return
+            if not re.fullmatch(r'[0-9+\-\s]{10,20}', data["hotline"]):
+                co_error.set_text('Hotline phải có ít nhất 10 chữ số')
                 return
             if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', data["email"]):
                 co_error.set_text('Email chưa đúng định dạng')
@@ -511,11 +520,13 @@ def create_register_page():
                 co_error.set_text('Mật khẩu cần mạnh hơn để bảo vệ tài khoản')
                 return
             
-            co_btn.props('loading')
-            res = await AuthService.register_company(data)
-            if res['success']:
-                ui.notify('Đăng ký công ty thành công! Vui lòng chờ phê duyệt.', type='positive')
-                ui.navigate.to(LOGIN_PAGE)
-            else:
-                co_error.set_text(res['message'])
-            co_btn.props(remove='loading')
+            co_btn.props('loading disable')
+            try:
+                res = await AuthService.register_company(data)
+                if res['success']:
+                    ui.notify('Đăng ký công ty thành công! Vui lòng chờ phê duyệt.', type='positive')
+                    ui.navigate.to(LOGIN_PAGE)
+                else:
+                    co_error.set_text(str(res.get('message') or 'Đăng ký thất bại'))
+            finally:
+                co_btn.props(remove='loading disable')

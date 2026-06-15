@@ -133,12 +133,15 @@ def find_nearby_companies(
     db: Session,
     latitude: float,
     longitude: float,
-    service_ids: List[int],
+    service_ids: Optional[List[int]] = None,
+    service_names: Optional[List[str]] = None,
     radius_km: float = 50.0,
 ) -> List[Tuple[RescueCompany, float, List[Service]]]:
     """
     Tìm các công ty cứu hộ gần vị trí người dùng có cung cấp tất cả các dịch vụ yêu cầu.
     """
+    service_ids = service_ids or []
+    service_names = [name.strip() for name in (service_names or []) if name and name.strip()]
     companies = db.query(RescueCompany).filter(
         RescueCompany.status == "active",
         RescueCompany.is_verified == True,
@@ -158,13 +161,21 @@ def find_nearby_companies(
             Service.is_active == True,
         ).all()
         company_service_ids = {s.id for s in company_services}
+        company_service_names = {(s.service_name or "").strip() for s in company_services}
 
         # Nếu công ty có đủ các services được yêu cầu
-        if all(sid in company_service_ids for sid in service_ids):
-            matched_services = [s for s in company_services if s.id in service_ids]
+        if (
+            all(sid in company_service_ids for sid in service_ids)
+            and all(name in company_service_names for name in service_names)
+        ):
+            matched_services = [
+                s
+                for s in company_services
+                if s.id in service_ids or (s.service_name or "").strip() in service_names
+            ]
             results.append((company, distance, matched_services))
 
-    results.sort(key=lambda x: x[1])
+    results.sort(key=lambda x: estimate_price(sum(s.base_price for s in x[2]), x[1]))
     return results
 
 

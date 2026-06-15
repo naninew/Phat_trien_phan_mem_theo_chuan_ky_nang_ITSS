@@ -20,16 +20,20 @@ async def get_services() -> List[Dict[str, Any]]:
 async def find_nearby_companies(
     latitude: float,
     longitude: float,
-    service_ids: List[int],
+    service_ids: Optional[List[int]] = None,
+    service_names: Optional[List[str]] = None,
     radius_km: float = 50.0,
 ) -> List[Dict[str, Any]]:
 
     params = {
         "latitude": latitude,
         "longitude": longitude,
-        "service_ids": service_ids,
         "radius_km": radius_km,
     }
+    if service_ids:
+        params["service_ids"] = service_ids
+    if service_names:
+        params["service_names"] = service_names
 
     print("SEARCH PARAMS =", params)
 

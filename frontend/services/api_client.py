@@ -127,9 +127,52 @@ class APIClient:
             if 200 <= response.status_code < 300:
                 return {"success": True, "data": res_data.get("data"), "message": res_data.get("message")}
             else:
-                return {"success": False, "message": res_data.get("detail") or "An error occurred"}
+                return {"success": False, "message": APIClient._format_error_message(res_data.get("detail"))}
         except Exception:
             return {"success": False, "message": f"Server error: {response.status_code}"}
+
+    @staticmethod
+    def _format_error_message(detail: Any) -> str:
+        if not detail:
+            return "Đã xảy ra lỗi"
+        if isinstance(detail, str):
+            translations = {
+                "Username already registered": "Tên đăng nhập đã được sử dụng",
+                "Email already registered": "Email đã được sử dụng",
+                "Invalid phone number format": "Số điện thoại chưa đúng định dạng",
+            }
+            return translations.get(detail, detail)
+        if isinstance(detail, list):
+            messages = []
+            for item in detail:
+                if not isinstance(item, dict):
+                    messages.append(str(item))
+                    continue
+                field = item.get("loc", [""])[-1]
+                msg = item.get("msg") or item.get("message") or "Dữ liệu không hợp lệ"
+                field_labels = {
+                    "username": "Tên đăng nhập",
+                    "password": "Mật khẩu",
+                    "full_name": "Họ và tên",
+                    "phone": "Số điện thoại",
+                    "email": "Email",
+                    "role": "Vai trò",
+                }
+                msg_translations = {
+                    "String should have at least 10 characters": "phải có ít nhất 10 ký tự",
+                    "String should have at least 6 characters": "phải có ít nhất 6 ký tự",
+                    "ensure this value has at least 10 characters": "phải có ít nhất 10 ký tự",
+                    "ensure this value has at least 6 characters": "phải có ít nhất 6 ký tự",
+                    "value is not a valid email address": "chưa đúng định dạng",
+                    "Invalid phone number format": "chưa đúng định dạng",
+                }
+                label = field_labels.get(field, str(field))
+                message = msg_translations.get(str(msg), str(msg))
+                messages.append(f"{label} {message}")
+            return "; ".join(messages)
+        if isinstance(detail, dict):
+            return str(detail.get("message") or detail.get("msg") or detail)
+        return str(detail)
 
 # Create a singleton instance
 api_client = APIClient()

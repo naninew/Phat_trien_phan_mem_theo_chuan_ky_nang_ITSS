@@ -97,32 +97,26 @@ def _create_notification(
 @router.get("/services")
 def list_services(db: Session = Depends(get_db)):
     """Lấy danh sách các tên dịch vụ độc nhất (để hiển thị dropdown)."""
-    
-    services = db.query(Service.id, Service.service_name).filter(Service.is_active == True).all()
-    # Sửa response để lấy id
-    result = [
-        {
-            "id": s.id,
-            "service_name": s.service_name
-        }
-        for s in services
+
+    service_names = [
+        row[0]
+        for row in db.query(func.trim(Service.service_name))
+        .filter(Service.is_active == True)
+        .distinct()
+        .order_by(func.trim(Service.service_name).asc())
+        .all()
+        if row[0]
     ]
-
-    print("=== RAW SERVICES FROM DB ===")
-    print(services)
-
-    print("=== RESPONSE JSON ===")
-    print(result)
     return success_response(
-    data=[
-        {
-            "id": s.id,
-            "service_name": s.service_name
-        }
-        for s in services
-    ],
-    message="Success",
-)
+        data=[
+            {
+                "id": name,
+                "service_name": name,
+            }
+            for name in service_names
+        ],
+        message="Success",
+    )
 
 
 @router.get("/company/services")
@@ -313,12 +307,28 @@ def create_company_profile(
 def find_nearby_companies(
     latitude: float,
     longitude: float,
-    service_ids: List[int] = Query(..., description="List of service IDs required"),
+    service_id: Optional[int] = Query(None, description="Single service ID required"),
+    service_ids: Optional[List[int]] = Query(None, description="List of service IDs required"),
+    service_names: Optional[List[str]] = Query(None, description="List of service names required"),
     radius_km: float = 50.0,
     db: Session = Depends(get_db),
 ):
     """Tìm công ty cứu hộ gần vị trí người dùng, cung cấp đủ các dịch vụ yêu cầu."""
-    results = rescue_svc.find_nearby_companies(db, latitude, longitude, service_ids, radius_km)
+    requested_service_ids = list(service_ids or [])
+    if service_id is not None:
+        requested_service_ids.append(service_id)
+
+    if not requested_service_ids and not service_names:
+        raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất một dịch vụ")
+
+    results = rescue_svc.find_nearby_companies(
+        db,
+        latitude,
+        longitude,
+        service_ids=requested_service_ids,
+        service_names=service_names or [],
+        radius_km=radius_km,
+    )
 
     data = []
     for company, distance, services in results:
@@ -337,10 +347,11 @@ def find_nearby_companies(
             "latitude": company.latitude,
             "longitude": company.longitude,
             "services": [
-                {"id": s.id, "service_name": s.service_name, "base_price": s.base_price}
+                {"id": s.id, "service_name": (s.service_name or "").strip(), "base_price": s.base_price}
                 for s in services
             ],
         })
+    data.sort(key=lambda item: item["estimated_price"])
 
     return success_response(data=data, message=f"Tìm thấy {len(data)} công ty")
 
