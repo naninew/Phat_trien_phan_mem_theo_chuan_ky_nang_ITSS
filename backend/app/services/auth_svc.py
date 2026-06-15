@@ -14,6 +14,7 @@ from app.utils.jwt_helper import create_access_token, create_refresh_token, get_
 AUTH_ERROR_WRONG_CREDENTIALS = "WRONG_CREDENTIALS"
 AUTH_ERROR_SUSPENDED         = "ACCOUNT_SUSPENDED"
 AUTH_ERROR_INACTIVE          = "ACCOUNT_INACTIVE"
+AUTH_ERROR_COMPANY_PENDING   = "COMPANY_PENDING"
 
 
 # Password hashing context - Use pbkdf2_sha256 for better compatibility on Python 3.14
@@ -114,6 +115,10 @@ def authenticate_user(db: Session, username: str, password: str) -> Tuple[Option
         return None, AUTH_ERROR_SUSPENDED
     if user.status == AccountStatus.INACTIVE:
         return None, AUTH_ERROR_INACTIVE
+    # Block company_staff whose company is still pending approval
+    if user.role == UserRole.COMPANY_STAFF:
+        if user.company and user.company.status == "pending":
+            return None, AUTH_ERROR_COMPANY_PENDING
     return user, None
 
 

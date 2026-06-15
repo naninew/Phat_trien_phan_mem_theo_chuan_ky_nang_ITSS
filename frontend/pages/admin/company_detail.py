@@ -73,7 +73,7 @@ def create_company_detail_page():
 
                     with ui.row().classes("w-full items-center gap-2 mb-2"):
                         ui.label(status_label).classes(
-                            f"text-[10px] font-bold uppercase px-3 py-1 rounded-full bg-{status_color}-50 text-{status_color}-600"
+                            f"text-xs font-bold uppercase px-3 py-1 rounded-full bg-{status_color}-50 text-{status_color}-600"
                         )
                         with ui.row().classes("items-center gap-1"):
                             ui.label(f"{c.get('rating_avg', 0)}").classes("font-bold text-amber-500")
@@ -82,10 +82,16 @@ def create_company_detail_page():
 
                     with ui.tabs().classes("w-full") as tabs:
                         tab_info = ui.tab("Thông tin")
-                        tab_services = ui.tab("Dịch vụ & Xe")
-                        tab_staff = ui.tab("Nhân sự")
-                        tab_requests = ui.tab("Lịch sử yêu cầu")
-                        tab_reviews = ui.tab("Đánh giá")
+                        if c.get("status") != "pending":
+                            tab_services = ui.tab("Dịch vụ & Xe")
+                            tab_staff = ui.tab("Nhân sự")
+                            tab_requests = ui.tab("Lịch sử yêu cầu")
+                            tab_reviews = ui.tab("Đánh giá")
+                        else:
+                            tab_services = None
+                            tab_staff = None
+                            tab_requests = None
+                            tab_reviews = None
 
                     with ui.tab_panels(tabs, value=tab_info).classes("w-full"):
                         with ui.tab_panel(tab_info):
@@ -99,83 +105,87 @@ def create_company_detail_page():
                                     if c.get("business_license"):
                                         ui.link("Xem giấy phép kinh doanh", c["business_license"], new_tab=True).classes("text-indigo-600")
 
-                        with ui.tab_panel(tab_services):
-                            with ui.row().classes("w-full gap-4"):
-                                with ui.card().classes("flex-1 p-6 rounded-2xl shadow-sm border border-gray-100"):
-                                    ui.label(f"Dịch vụ ({len(c.get('services', []))})").classes("text-lg font-bold mb-4")
-                                    if not c.get("services"):
-                                        ui.label("Chưa có dịch vụ").classes("text-gray-500 italic")
-                                    else:
-                                        service_cols = [
-                                            {"name": "name", "label": "Tên dịch vụ", "field": "name", "align": "left"},
-                                            {"name": "price_range", "label": "Giá", "field": "price_range", "align": "right"},
-                                        ]
-                                        ui.table(columns=service_cols, rows=c["services"]).classes("w-full").props("flat bordered")
+                        if tab_services:
+                            with ui.tab_panel(tab_services):
+                                with ui.row().classes("w-full gap-4"):
+                                    with ui.card().classes("flex-1 p-6 rounded-2xl shadow-sm border border-gray-100"):
+                                        ui.label(f"Dịch vụ ({len(c.get('services', []))})").classes("text-lg font-bold mb-4")
+                                        if not c.get("services"):
+                                            ui.label("Chưa có dịch vụ").classes("text-gray-500 italic")
+                                        else:
+                                            service_cols = [
+                                                {"name": "name", "label": "Tên dịch vụ", "field": "name", "align": "left"},
+                                                {"name": "price_range", "label": "Giá", "field": "price_range", "align": "right"},
+                                            ]
+                                            ui.table(columns=service_cols, rows=c["services"]).classes("w-full").props("flat bordered")
 
-                                with ui.card().classes("flex-1 p-6 rounded-2xl shadow-sm border border-gray-100"):
-                                    ui.label(f"Xe cứu hộ ({len(c.get('vehicles', []))})").classes("text-lg font-bold mb-4")
-                                    if not c.get("vehicles"):
-                                        ui.label("Chưa có xe").classes("text-gray-500 italic")
+                                    with ui.card().classes("flex-1 p-6 rounded-2xl shadow-sm border border-gray-100"):
+                                        ui.label(f"Xe cứu hộ ({len(c.get('vehicles', []))})").classes("text-lg font-bold mb-4")
+                                        if not c.get("vehicles"):
+                                            ui.label("Chưa có xe").classes("text-gray-500 italic")
+                                        else:
+                                            vehicle_cols = [
+                                                {"name": "plate", "label": "Biển số", "field": "plate", "align": "left"},
+                                                {"name": "type", "label": "Loại xe", "field": "type", "align": "left"},
+                                                {"name": "status", "label": "Trạng thái", "field": "status", "align": "left"},
+                                            ]
+                                            ui.table(columns=vehicle_cols, rows=c["vehicles"]).classes("w-full").props("flat bordered")
+
+                        if tab_staff:
+                            with ui.tab_panel(tab_staff):
+                                with ui.card().classes("w-full p-6 rounded-2xl shadow-sm border border-gray-100"):
+                                    ui.label(f"Nhân sự ({len(c.get('staff', []))})").classes("text-lg font-bold mb-4")
+                                    if not c.get("staff"):
+                                        ui.label("Chưa có nhân viên").classes("text-gray-500 italic")
                                     else:
-                                        vehicle_cols = [
-                                            {"name": "plate", "label": "Biển số", "field": "plate", "align": "left"},
-                                            {"name": "type", "label": "Loại xe", "field": "type", "align": "left"},
+                                        staff_cols = [
+                                            {"name": "name", "label": "Tên", "field": "name", "align": "left"},
+                                            {"name": "role", "label": "Vai trò", "field": "role", "align": "left"},
                                             {"name": "status", "label": "Trạng thái", "field": "status", "align": "left"},
                                         ]
-                                        ui.table(columns=vehicle_cols, rows=c["vehicles"]).classes("w-full").props("flat bordered")
+                                        ui.table(columns=staff_cols, rows=c["staff"]).classes("w-full").props("flat bordered")
 
-                        with ui.tab_panel(tab_staff):
-                            with ui.card().classes("w-full p-6 rounded-2xl shadow-sm border border-gray-100"):
-                                ui.label(f"Nhân sự ({len(c.get('staff', []))})").classes("text-lg font-bold mb-4")
-                                if not c.get("staff"):
-                                    ui.label("Chưa có nhân viên").classes("text-gray-500 italic")
-                                else:
-                                    staff_cols = [
-                                        {"name": "name", "label": "Tên", "field": "name", "align": "left"},
-                                        {"name": "role", "label": "Vai trò", "field": "role", "align": "left"},
-                                        {"name": "status", "label": "Trạng thái", "field": "status", "align": "left"},
-                                    ]
-                                    ui.table(columns=staff_cols, rows=c["staff"]).classes("w-full").props("flat bordered")
+                        if tab_requests:
+                            with ui.tab_panel(tab_requests):
+                                with ui.card().classes("w-full p-6 rounded-2xl shadow-sm border border-gray-100"):
+                                    ui.label("Lịch sử yêu cầu (10 gần nhất)").classes("text-lg font-bold mb-4")
+                                    if not c.get("recent_requests"):
+                                        ui.label("Chưa có yêu cầu").classes("text-gray-500 italic")
+                                    else:
+                                        req_cols = [
+                                            {"name": "id", "label": "ID", "field": "id", "align": "left"},
+                                            {"name": "customer", "label": "Khách hàng", "field": "customer_name", "align": "left"},
+                                            {"name": "type", "label": "Loại sự cố", "field": "incident_type", "align": "left"},
+                                            {"name": "status", "label": "Trạng thái", "field": "status", "align": "left"},
+                                            {"name": "date", "label": "Ngày", "field": "created_at", "align": "left"},
+                                            {"name": "cost", "label": "Tổng tiền", "field": "total_cost", "align": "right"},
+                                        ]
+                                        rows = []
+                                        for r in c["recent_requests"]:
+                                            row = r.copy()
+                                            row["created_at"] = row["created_at"][:16].replace("T", " ")
+                                            if row["total_cost"] is not None:
+                                                row["total_cost"] = f"{row['total_cost']:,.0f} đ"
+                                            else:
+                                                row["total_cost"] = "N/A"
+                                            rows.append(row)
+                                        ui.table(columns=req_cols, rows=rows).classes("w-full").props("flat bordered")
 
-                        with ui.tab_panel(tab_requests):
-                            with ui.card().classes("w-full p-6 rounded-2xl shadow-sm border border-gray-100"):
-                                ui.label("Lịch sử yêu cầu (10 gần nhất)").classes("text-lg font-bold mb-4")
-                                if not c.get("recent_requests"):
-                                    ui.label("Chưa có yêu cầu").classes("text-gray-500 italic")
-                                else:
-                                    req_cols = [
-                                        {"name": "id", "label": "ID", "field": "id", "align": "left"},
-                                        {"name": "customer", "label": "Khách hàng", "field": "customer_name", "align": "left"},
-                                        {"name": "type", "label": "Loại sự cố", "field": "incident_type", "align": "left"},
-                                        {"name": "status", "label": "Trạng thái", "field": "status", "align": "left"},
-                                        {"name": "date", "label": "Ngày", "field": "created_at", "align": "left"},
-                                        {"name": "cost", "label": "Tổng tiền", "field": "total_cost", "align": "right"},
-                                    ]
-                                    rows = []
-                                    for r in c["recent_requests"]:
-                                        row = r.copy()
-                                        row["created_at"] = row["created_at"][:16].replace("T", " ")
-                                        if row["total_cost"] is not None:
-                                            row["total_cost"] = f"{row['total_cost']:,.0f} đ"
-                                        else:
-                                            row["total_cost"] = "N/A"
-                                        rows.append(row)
-                                    ui.table(columns=req_cols, rows=rows).classes("w-full").props("flat bordered")
-
-                        with ui.tab_panel(tab_reviews):
-                            with ui.card().classes("w-full p-6 rounded-2xl shadow-sm border border-gray-100"):
-                                ui.label(f"Đánh giá nhận được ({len(c.get('reviews', []))})").classes("text-lg font-bold mb-4")
-                                if not c.get("reviews"):
-                                    ui.label("Chưa có đánh giá").classes("text-gray-500 italic")
-                                else:
-                                    with ui.column().classes("w-full gap-2"):
-                                        for rv in c["reviews"]:
-                                            with ui.card().classes("w-full p-4 border border-gray-200 shadow-none"):
-                                                with ui.row().classes("w-full justify-between"):
-                                                    ui.label(rv["customer_name"]).classes("font-bold")
-                                                    ui.label(rv["created_at"][:10]).classes("text-sm text-gray-500")
-                                                ui.label("⭐" * rv["rating"]).classes("text-amber-400 text-xs")
-                                                ui.label(rv.get("comment", "")).classes("text-gray-700 mt-2")
+                        if tab_reviews:
+                            with ui.tab_panel(tab_reviews):
+                                with ui.card().classes("w-full p-6 rounded-2xl shadow-sm border border-gray-100"):
+                                    ui.label(f"Đánh giá nhận được ({len(c.get('reviews', []))})").classes("text-lg font-bold mb-4")
+                                    if not c.get("reviews"):
+                                        ui.label("Chưa có đánh giá").classes("text-gray-500 italic")
+                                    else:
+                                        with ui.column().classes("w-full gap-2"):
+                                            for rv in c["reviews"]:
+                                                with ui.card().classes("w-full p-4 border border-gray-200 shadow-none"):
+                                                    with ui.row().classes("w-full justify-between"):
+                                                        ui.label(rv["customer_name"]).classes("font-bold")
+                                                        ui.label(rv["created_at"][:10]).classes("text-sm text-gray-500")
+                                                    ui.label("⭐" * rv["rating"]).classes("text-amber-400 text-xs")
+                                                    ui.label(rv.get("comment", "")).classes("text-gray-700 mt-2")
 
             async def _show_approve_dialog(company):
                 with ui.dialog() as dialog, ui.card().classes("p-6 rounded-2xl w-96"):

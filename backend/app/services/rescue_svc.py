@@ -95,24 +95,27 @@ def get_all_companies(
     return q.order_by(RescueCompany.created_at.desc()).all()
 
 
-def create_company_profile(db: Session, owner_id: int, data: any) -> RescueCompany:
-    """Tạo profile công ty mới cho owner."""
+def create_company_profile(db: Session, owner_id: int, data: any, initial_status: str = "pending") -> RescueCompany:
+    """Tạo profile công ty mới cho owner.
+    
+    initial_status: 'pending' (từ đăng ký) hoặc 'active' (admin tạo trực tiếp).
+    """
     from app.models.user import User
 
     owner = db.query(User).filter(User.id == owner_id).first()
     company = RescueCompany(
         owner_id=owner_id,
-        company_name=data.company_name,
+        company_name=getattr(data, "company_name", None),
         representative_name=owner.full_name if owner else None,
-        address=data.address,
-        hotline=data.hotline,
-        business_license=data.business_license or f"LIC-{owner_id}",
-        operating_area=data.operating_area,
-        description=data.description,
-        latitude=data.latitude,
-        longitude=data.longitude,
+        address=getattr(data, "address", None),
+        hotline=getattr(data, "hotline", None),
+        business_license=getattr(data, "business_license", None) or f"LIC-{owner_id}",
+        operating_area=getattr(data, "operating_area", None),
+        description=getattr(data, "description", None),
+        latitude=getattr(data, "latitude", None),
+        longitude=getattr(data, "longitude", None),
         rating_avg=0.0,
-        status="pending",
+        status=initial_status,
         is_verified=False
     )
     db.add(company)

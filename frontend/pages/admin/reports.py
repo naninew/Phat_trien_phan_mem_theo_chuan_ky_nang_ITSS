@@ -193,14 +193,16 @@ def create_reports_page():
                 {"name": item.get("type", "?"), "value": item.get("count", 0)}
                 for item in data.get("by_incident_type", [])
             ]
-            incident_chart.options = _pie_options(pie_data)
+            incident_chart.options.clear()
+            incident_chart.options.update(_pie_options(pie_data))
             incident_chart.update()
 
             by_date = data.get("by_date", [])
-            req_line_chart.options = _line_options(
+            req_line_chart.options.clear()
+            req_line_chart.options.update(_line_options(
                 [d["date"] for d in by_date],
                 [d["count"] for d in by_date],
-            )
+            ))
             req_line_chart.update()
 
         async def _load_revenue():
@@ -234,17 +236,19 @@ def create_reports_page():
                 ui.table(columns=columns, rows=rows, row_key="company_name").classes("w-full")
 
             by_date = data.get("by_date", [])
-            rev_bar_chart.options = _bar_options(
+            rev_bar_chart.options.clear()
+            rev_bar_chart.options.update(_bar_options(
                 [d["date"] for d in by_date],
                 [d["revenue"] for d in by_date],
-            )
+            ))
             rev_bar_chart.update()
 
             method_data = [
                 {"name": m.get("method", "?"), "value": m.get("total_amount", 0)}
                 for m in data.get("by_payment_method", [])
             ]
-            rev_pie_chart.options = _pie_options(method_data)
+            rev_pie_chart.options.clear()
+            rev_pie_chart.options.update(_pie_options(method_data))
             rev_pie_chart.update()
 
         async def _load_satisfaction():
@@ -292,11 +296,12 @@ def create_reports_page():
             _fill_rank_table(sat_bottom_table, data.get("top5_lowest", []), "Chưa có dữ liệu")
 
             reviews_by_date = data.get("reviews_by_date", [])
-            sat_line_chart.options = _line_options(
+            sat_line_chart.options.clear()
+            sat_line_chart.options.update(_line_options(
                 [d["date"] for d in reviews_by_date],
                 [d["count"] for d in reviews_by_date],
                 "Số đánh giá",
-            )
+            ))
             sat_line_chart.update()
 
         def _active_report_type() -> str:

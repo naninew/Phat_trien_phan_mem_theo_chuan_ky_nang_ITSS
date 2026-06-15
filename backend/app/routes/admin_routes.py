@@ -404,14 +404,20 @@ def list_users(
     _require_admin(current_user)
     from app.models.request import RescueRequest
     
+    from app.models.company import RescueCompany
+
     # Subquery for counting requests
     req_count_subq = db.query(
         RescueRequest.user_id,
         func.count(RescueRequest.id).label('request_count')
     ).group_by(RescueRequest.user_id).subquery()
     
-    q = db.query(User, func.coalesce(req_count_subq.c.request_count, 0).label('request_count'))\
-          .outerjoin(req_count_subq, User.id == req_count_subq.c.user_id)
+    q = db.query(
+        User, 
+        func.coalesce(req_count_subq.c.request_count, 0).label('request_count'),
+        RescueCompany.company_name
+    ).outerjoin(req_count_subq, User.id == req_count_subq.c.user_id)\
+     .outerjoin(RescueCompany, User.id == RescueCompany.owner_id)
           
     if role_filter and role_filter != "all":
         q = q.filter(User.role == role_filter)
@@ -434,7 +440,7 @@ def list_users(
                 {
                     "id": u.User.id,
                     "username": u.User.username,
-                    "full_name": u.User.full_name,
+                    "full_name": u.company_name if (u.User.role.value == "company_staff" and u.company_name) else u.User.full_name,
                     "email": u.User.email,
                     "phone": u.User.phone,
                     "role": u.User.role.value,
@@ -735,22 +741,29 @@ def get_company_detail(
     from app.models.vehicle import RescueVehicle
     from app.models.staff import RescueStaff
 
-    services = db.query(Service).filter(Service.company_id == company.id).all()
-    vehicles = db.query(RescueVehicle).filter(RescueVehicle.company_id == company.id).all()
-    staff_list = db.query(RescueStaff).filter(RescueStaff.company_id == company.id).all()
-    requests = (
-        db.query(RescueRequest)
-        .filter(RescueRequest.company_id == company.id)
-        .order_by(RescueRequest.created_at.desc())
-        .limit(10)
-        .all()
-    )
-    reviews = (
-        db.query(Review)
-        .filter(Review.company_id == company.id)
-        .order_by(Review.created_at.desc())
-        .all()
-    )
+    if company.status == "pending":
+        services = []
+        vehicles = []
+        staff_list = []
+        requests = []
+        reviews = []
+    else:
+        services = db.query(Service).filter(Service.company_id == company.id).all()
+        vehicles = db.query(RescueVehicle).filter(RescueVehicle.company_id == company.id).all()
+        staff_list = db.query(RescueStaff).filter(RescueStaff.company_id == company.id).all()
+        requests = (
+            db.query(RescueRequest)
+            .filter(RescueRequest.company_id == company.id)
+            .order_by(RescueRequest.created_at.desc())
+            .limit(10)
+            .all()
+        )
+        reviews = (
+            db.query(Review)
+            .filter(Review.company_id == company.id)
+            .order_by(Review.created_at.desc())
+            .all()
+        )
 
     recent_requests = []
     for r in requests:
@@ -977,7 +990,7 @@ def list_all_requests(
             "status": r.status,
             "customer_name": customer.full_name if customer else "N/A",
             "company_name": company.company_name if company else "Chưa tiếp nhận",
-            "total_cost": r.total_cost,
+            "total_cost": r.agreed_price,
             "payment_status": r.payment_status,
             "created_at": r.created_at.isoformat(),
         })

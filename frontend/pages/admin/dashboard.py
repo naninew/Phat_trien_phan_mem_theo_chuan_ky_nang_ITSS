@@ -217,8 +217,8 @@ def create_admin_dashboard():
 def _stat_card(title, value, icon, color):
     with ui.card().classes(f"flex-1 min-w-[150px] rounded-2xl p-6 shadow-sm border border-{color}-100 bg-white items-center gap-1") as card:
         ui.icon(icon, size="2rem", color=color)
-        ui.label(value).classes(f"text-3xl font-bold text-{color}-700 break-words text-center w-full")
-        ui.label(title).classes("text-[10px] sm:text-xs text-gray-400 font-bold uppercase text-center w-full")
+        ui.label(value).classes(f"text-4xl font-bold text-{color}-700 break-words text-center w-full")
+        ui.label(title).classes("text-xs sm:text-sm text-gray-400 font-bold uppercase text-center w-full")
     return card
 
 
@@ -227,6 +227,6 @@ def _action_card(title, icon, route, desc, color):
         with ui.row().classes("items-center gap-4"):
             ui.avatar(icon=icon).classes(f"bg-{color}-100 text-{color}-600")
             with ui.column().classes("gap-0"):
-                ui.label(title).classes("font-bold text-gray-800")
-                ui.label(desc).classes("text-xs text-gray-500")
+                ui.label(title).classes("font-bold text-lg text-gray-800")
+                ui.label(desc).classes("text-sm text-gray-500")
 

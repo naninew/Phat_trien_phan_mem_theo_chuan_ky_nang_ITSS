@@ -108,34 +108,34 @@ def create_companies_page():
                         ui.avatar(icon="business").classes(f"bg-{color}-100 text-{color}-600")
                         with ui.column().classes("gap-0"):
                             ui.label(c["company_name"]).classes("font-bold text-xl text-gray-800")
-                            ui.label(f"GPKD: {c.get('business_license', 'N/A')}").classes("text-xs text-gray-400 font-mono")
-                            ui.label(f"Người đại diện: {c.get('representative_name', 'N/A')}").classes("text-sm text-gray-600 mt-1")
+                            ui.label(f"GPKD: {c.get('business_license', 'N/A')}").classes("text-sm text-gray-400 font-mono")
+                            ui.label(f"Người đại diện: {c.get('representative_name', 'N/A')}").classes("text-base text-gray-600 mt-1")
 
                     with ui.column().classes("items-end gap-2"):
                         ui.label(label).classes(
-                            f"text-[10px] font-bold uppercase px-3 py-1 rounded-full bg-{color}-50 text-{color}-600 border border-{color}-100"
+                            f"text-xs font-bold uppercase px-3 py-1 rounded-full bg-{color}-50 text-{color}-600 border border-{color}-100"
                         )
-                        ui.label(verified_badge).classes("text-[10px] text-gray-500")
+                        ui.label(verified_badge).classes("text-xs text-gray-500")
                         with ui.row().classes("items-center gap-1"):
                             ui.label(f"{c.get('rating', c.get('rating_avg', 0))}").classes("font-bold text-amber-500")
                             ui.icon("star", color="amber", size="1rem")
 
                 with ui.row().classes("mt-4 gap-10 flex-wrap"):
                     with ui.column().classes("gap-1"):
-                        ui.label("SĐT / Hotline").classes("text-[10px] text-gray-400 uppercase font-bold")
+                        ui.label("SĐT / Hotline").classes("text-xs text-gray-400 uppercase font-bold")
                         ui.label(c.get("phone", c.get("hotline", "N/A"))).classes("font-bold text-indigo-600")
 
                     with ui.column().classes("gap-1"):
-                        ui.label("Ngày đăng ký").classes("text-[10px] text-gray-400 uppercase font-bold")
+                        ui.label("Ngày đăng ký").classes("text-xs text-gray-400 uppercase font-bold")
                         reg_date = c.get("registered_at", c.get("created_at", ""))[:10]
                         ui.label(reg_date).classes("text-sm text-gray-600")
 
                     with ui.column().classes("gap-1"):
-                        ui.label("Khu vực").classes("text-[10px] text-gray-400 uppercase font-bold")
+                        ui.label("Khu vực").classes("text-xs text-gray-400 uppercase font-bold")
                         ui.label(c.get("area", "N/A")).classes("text-sm text-gray-600")
 
                     with ui.column().classes("gap-1"):
-                        ui.label("Địa chỉ").classes("text-[10px] text-gray-400 uppercase font-bold")
+                        ui.label("Địa chỉ").classes("text-xs text-gray-400 uppercase font-bold")
                         ui.label(c.get("address", "N/A")).classes("text-sm text-gray-600 max-w-md")
 
                 ui.separator().classes("my-4 opacity-50")

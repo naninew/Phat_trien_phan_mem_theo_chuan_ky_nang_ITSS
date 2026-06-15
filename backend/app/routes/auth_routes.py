@@ -24,6 +24,7 @@ def register(user_data: UserRegister, db: Session = Depends(get_db)) -> dict:
     - **phone**: Phone number
     - **email**: Valid email address
     - **role**: Optional user role (default: customer)
+    - For company_staff role: company_name, business_license, address, hotline are also accepted.
     """
     # Check if username already exists
     existing_user = auth_svc.get_user_by_username(db, user_data.username)
@@ -46,8 +47,31 @@ def register(user_data: UserRegister, db: Session = Depends(get_db)) -> dict:
     role_val = user_data.role if user_data.role else "customer"
     user = auth_svc.create_user(db, user_data, role=UserRole(role_val))
     
+    response_data: dict = {"user_id": user.id, "username": user.username}
+
+    # If registering as a company staff, auto-create a pending company profile
+    if role_val == "company_staff":
+        if not user_data.company_name or not user_data.business_license:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="company_name and business_license are required for company registration"
+            )
+        from app.services import rescue_svc
+        company = rescue_svc.create_company_profile(
+            db=db,
+            owner_id=user.id,
+            data=user_data,
+            initial_status="pending",
+        )
+        response_data["company_id"] = company.id
+        response_data["company_status"] = "pending"
+        return success_response(
+            data=response_data,
+            message="Đăng ký công ty thành công! Vui lòng chờ quản trị viên phê duyệt."
+        )
+
     return success_response(
-        data={"user_id": user.id, "username": user.username},
+        data=response_data,
         message="Registration successful"
     )
 
@@ -69,6 +93,7 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)) -> dict:
         AUTH_ERROR_WRONG_CREDENTIALS,
         AUTH_ERROR_SUSPENDED,
         AUTH_ERROR_INACTIVE,
+        AUTH_ERROR_COMPANY_PENDING,
     )
 
     # authenticate_user trả về tuple (user | None, error_code | None)
@@ -88,6 +113,11 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)) -> dict:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tài khoản chưa được kích hoạt. Vui lòng kiểm tra email để xác minh.",
+        )
+    if error_code == AUTH_ERROR_COMPANY_PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản công ty của bạn đang chờ quản trị viên phê duyệt. Vui lòng thử lại sau khi được phê duyệt.",
         )
 
     # Generate tokens

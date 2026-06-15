@@ -112,12 +112,12 @@ def create_users_page():
                     with ui.row().classes("items-center gap-4"):
                         ui.avatar(icon="person").classes(f"bg-{color}-100 text-{color}-600")
                         with ui.column().classes("gap-0"):
-                            ui.label(u['full_name']).classes("font-bold text-lg text-gray-800")
-                            ui.label(f"@{u['username']} • {u['email']}").classes("text-xs text-gray-500")
+                            ui.label(u['full_name']).classes("font-bold text-xl text-gray-800")
+                            ui.label(f"@{u['username']} • {u['email']}").classes("text-sm text-gray-500")
                     
                     with ui.row().classes("items-center gap-3"):
-                        ui.label(role_label).classes(f"text-[10px] font-bold uppercase px-3 py-1 rounded-full bg-{color}-50 text-{color}-600 border border-{color}-100")
-                        ui.label(status).classes(f"text-[10px] font-bold uppercase px-3 py-1 rounded-full bg-{s_color}-50 text-{s_color}-600 border border-{s_color}-100")
+                        ui.label(role_label).classes(f"text-xs font-bold uppercase px-3 py-1 rounded-full bg-{color}-50 text-{color}-600 border border-{color}-100")
+                        ui.label(status).classes(f"text-xs font-bold uppercase px-3 py-1 rounded-full bg-{s_color}-50 text-{s_color}-600 border border-{s_color}-100")
                         
                         # Badge số yêu cầu
                         ui.badge(f"{req_count} yêu cầu", color="indigo").props("outline")

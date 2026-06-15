@@ -14,6 +14,11 @@ class UserRegister(BaseModel):
     phone: str = Field(..., min_length=10, max_length=20)
     email: EmailStr
     role: Optional[str] = "customer"
+    # Company-specific fields (only required when role == company_staff)
+    company_name: Optional[str] = None
+    business_license: Optional[str] = None
+    hotline: Optional[str] = None
+    address: Optional[str] = None
     
     @validator('phone')
     def validate_phone(cls, v):
