@@ -113,6 +113,24 @@ async def submit_review(request_id: int, rating: int, comment: str = "") -> Dict
     return r.get("data", {})
 
 
+async def process_payment(
+    request_id: int,
+    amount: float,
+    payment_method: str = "cash",
+    transaction_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "amount": amount,
+        "payment_method": payment_method,
+    }
+    if transaction_id:
+        payload["transaction_id"] = transaction_id
+    r = await api_client.post(f"/rescue/requests/{request_id}/payment", data=payload)
+    if not r.get("success", False):
+        raise RuntimeError(r.get("message") or "Không thể thanh toán")
+    return r.get("data", {})
+
+
 # ── Queue – Company ───────────────────────────────────────────────────────────
 async def get_company_queue(status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
     params = {}

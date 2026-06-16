@@ -14,6 +14,7 @@ from components.page_layout import page_layout
 from services.rescue_api import (
     get_request_detail,
     cancel_request,
+    process_payment,
 )
 
 try:
@@ -692,10 +693,33 @@ def create_track_page() -> None:
                             else:
                                 ui.label("Đang chờ cập nhật chi phí...").classes("italic opacity-70")
 
+                    async def confirm_payment() -> None:
+                        if req.get("has_review"):
+                            ui.navigate.to(f"/customer/review/{request_id}")
+                            return
+                        if req.get("payment_status") == "paid":
+                            ui.navigate.to(f"/customer/review/{request_id}")
+                            return
+                        if price is None:
+                            ui.notify("Chưa có số tiền cần thanh toán", type="warning")
+                            return
+
+                        try:
+                            await process_payment(
+                                request_id=request_id,
+                                amount=float(price),
+                                payment_method=req.get("payment_method") or "cash",
+                            )
+                            ui.notify("Thanh toán thành công", type="positive")
+                            await update_ui()
+                            ui.navigate.to(f"/customer/review/{request_id}")
+                        except Exception as e:
+                            ui.notify(f"Lỗi: {str(e)}", type="negative")
+
                     ui.button(
                         "XEM ĐÁNH GIÁ" if req.get("has_review") else "OK",
                         icon="check",
-                        on_click=lambda: ui.navigate.to(f"/customer/review/{request_id}"),
+                        on_click=confirm_payment,
                     ).classes(
                         "w-full rounded-2xl font-bold py-4 bg-emerald-600 text-white"
                     ).props("unelevated")

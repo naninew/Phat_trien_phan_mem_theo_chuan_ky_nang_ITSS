@@ -562,15 +562,29 @@ def process_payment(
     req = get_request_by_id(db, request_id)
     if not req or req.user_id != user_id or req.status != RequestStatus.COMPLETED:
         return None
-    
-    payment = Payment(
-        rescue_request_id=request_id,
-        amount=payment_data.amount,
-        payment_method=payment_data.payment_method,
-        transaction_id=payment_data.transaction_id,
-        status="success"
-    )
-    db.add(payment)
+
+    if req.payment_status == "paid":
+        return req
+
+    existing_payment = db.query(Payment).filter(
+        Payment.rescue_request_id == request_id
+    ).first()
+    if existing_payment:
+        existing_payment.amount = payment_data.amount
+        existing_payment.payment_method = payment_data.payment_method
+        existing_payment.transaction_id = payment_data.transaction_id
+        existing_payment.status = "success"
+        existing_payment.paid_at = datetime.utcnow()
+    else:
+        payment = Payment(
+            rescue_request_id=request_id,
+            amount=payment_data.amount,
+            payment_method=payment_data.payment_method,
+            transaction_id=payment_data.transaction_id,
+            status="success",
+            paid_at=datetime.utcnow(),
+        )
+        db.add(payment)
     
     req.payment_status = "paid"
     req.payment_method = payment_data.payment_method

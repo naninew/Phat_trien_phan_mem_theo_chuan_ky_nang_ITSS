@@ -436,6 +436,7 @@ def get_my_requests(
                 "agreed_price": r.agreed_price,
                 "invoice_description": r.invoice_description,
                 "payment_method": r.payment_method,
+                "payment_status": r.payment_status,
                 "has_review": review is not None,
                 "can_review": review_meta["can_review"],
                 "review_deadline": review_meta["review_deadline"],
@@ -636,6 +637,7 @@ def get_company_queue(
             "eta_minutes": r.eta_minutes,
             "agreed_price": r.agreed_price,
             "payment_method": r.payment_method,
+            "payment_status": r.payment_status,
             "created_at": r.created_at.isoformat(),
         })
     return success_response(data=data, message="Success")
@@ -839,6 +841,15 @@ def process_payment(
     req = rescue_svc.process_payment(db, request_id, current_user["user_id"], payment_data)
     if not req:
         raise HTTPException(status_code=400, detail="Không thể thanh toán (chưa hoàn thành hoặc không hợp lệ)")
+    if req.company and req.company.owner_id:
+        _create_notification(
+            db,
+            req.company.owner_id,
+            "Khách hàng đã thanh toán",
+            f"Yêu cầu #{req.id} đã được thanh toán.",
+            req.id,
+            "PAYMENT_PAID",
+        )
     
     return success_response(
         data={"id": req.id, "payment_status": req.payment_status},

@@ -33,6 +33,11 @@ def _ws_url(request_id: int, token: str) -> str:
     return f"{base}/ws/chat/{request_id}?token={token}"
 
 
+def _notification_ws_url(token: str) -> str:
+    base = BACKEND_URL.replace("https://", "wss://").replace("http://", "ws://")
+    return f"{base}/ws/notifications?token={token}"
+
+
 def create_queue_page():
     """Register /company/queue route."""
 
@@ -63,6 +68,7 @@ def create_queue_page():
         # ── Chat State (per open dialog) ─────────────────────────────────────
         # Stores active WS tasks so we can cancel when dialog closes
         active_chat_tasks: Dict[int, asyncio.Task] = {}
+        status_ws_task: Optional[asyncio.Task] = None
 
         async def _load_from_event(_=None):
             await _load_data()
@@ -630,6 +636,8 @@ def create_queue_page():
             }
             label, tone = status_map.get(r['status'], (r['status'], "slate"))
             customer_name = r.get('customer_name', 'Khách hàng')
+            is_completed = r.get('status') == 'COMPLETED'
+            is_paid = r.get('payment_status') == 'paid'
 
             with ui.element("div").classes("company-card company-card-hover w-full p-5"):
                 with ui.row().classes("w-full justify-between items-start"):
@@ -637,6 +645,8 @@ def create_queue_page():
                         with ui.row().classes("items-center gap-3"):
                             ui.label(f"#{r['id']}").classes("text-xs font-black text-slate-400")
                             status_badge(label, tone)
+                            if is_completed:
+                                status_badge("Thanh toán" if is_paid else "Chưa thanh toán", "emerald" if is_paid else "amber")
 
                         ui.label(r.get('service_name', 'Dịch vụ cứu hộ')).classes(
                             "text-2xl font-black font-outfit text-slate-900"
@@ -915,10 +925,44 @@ def create_queue_page():
                 ui.notify(f"Lỗi: {e}", type="negative")
 
         await _load_data()
+        async def _status_ws_listener():
+            if not _HAS_WEBSOCKETS or not token:
+                return
+
+            while token:
+                try:
+                    async with websockets.connect(
+                        _notification_ws_url(token),
+                        ping_interval=20,
+                        ping_timeout=10,
+                        close_timeout=5,
+                    ) as ws:
+                        async for raw in ws:
+                            try:
+                                data = json.loads(raw)
+                            except json.JSONDecodeError:
+                                continue
+
+                            notification = data.get("notification") or {}
+                            if (
+                                data.get("type") == "notification"
+                                and notification.get("event") in ("request_payment_update", "request_status_update")
+                            ):
+                                await _load_data(auto_refresh=True)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    print(f"[queue status ws] {exc}")
+                    await asyncio.sleep(3)
+
+        if _HAS_WEBSOCKETS and token:
+            status_ws_task = asyncio.create_task(_status_ws_listener())
         timer = ui.timer(15, lambda: _load_data(auto_refresh=True))
 
         def _cleanup_page_tasks():
             timer.deactivate()
+            if status_ws_task and not status_ws_task.done():
+                status_ws_task.cancel()
             for task in list(active_chat_tasks.values()):
                 if not task.done():
                     task.cancel()
