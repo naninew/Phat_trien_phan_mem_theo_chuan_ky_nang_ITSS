@@ -5,8 +5,11 @@ Professional Rescue Tracking UI with real-time WebSocket chat
 
 import asyncio
 import json
+import re
+import uuid
 import requests
 from datetime import datetime
+from urllib.parse import quote
 from nicegui import ui, app as nicegui_app
 from core.auth import require_role, get_access_token
 from core.config import BACKEND_URL
@@ -91,6 +94,16 @@ TIMELINE_STEPS = [
 ]
 
 
+def _payment_qr_url(request_id: int, amount: float) -> str:
+    """Build a QR image URL without requiring an extra Python package."""
+    payload = f"RESCUE_PAYMENT|REQUEST={request_id}|AMOUNT={amount:.0f}|CURRENCY=VND"
+    return (
+        "https://quickchart.io/qr"
+        f"?text={quote(payload, safe='')}"
+        "&size=260&margin=2&ecLevel=M&dark=0f172a&light=ffffff&format=png"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Page factory
 # ---------------------------------------------------------------------------
@@ -114,6 +127,8 @@ def create_track_page() -> None:
             "company_marker": None,
             "ws_task":        None,  # asyncio task for WS connection
             "connected":      False,
+            "payment_open":   False,
+            "staff_dialog_open": False,
         }
 
         # ────────────────────────────────────────────────────────────────
@@ -637,7 +652,56 @@ def create_track_page() -> None:
         # COMPANY INFO
         # ────────────────────────────────────────────────────────────────
 
+        def show_staff_detail(assignment: dict) -> None:
+            state["staff_dialog_open"] = True
+            dialog = ui.dialog()
+
+            def dialog_closed() -> None:
+                state["staff_dialog_open"] = False
+
+            dialog.on("hide", dialog_closed)
+            with dialog, ui.card().classes("w-[500px] max-w-[94vw] rounded-3xl p-0 overflow-hidden"):
+                with ui.row().classes("w-full items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5 text-white"):
+                    with ui.column().classes("gap-0"):
+                        ui.label("Nhân viên cứu hộ").classes("text-xl font-black")
+                        ui.label("Thông tin người được phân công").classes("text-xs text-blue-100")
+                    ui.button(icon="close", on_click=dialog.close).props("flat round color=white")
+
+                with ui.column().classes("w-full gap-4 p-6"):
+                    with ui.row().classes("items-center gap-4"):
+                        ui.avatar(icon="engineering", size="64px").classes("bg-blue-50 text-blue-600")
+                        with ui.column().classes("gap-0"):
+                            ui.label(assignment.get("staff_full_name") or assignment.get("staff_name") or "Nhân viên cứu hộ").classes("text-xl font-black text-slate-900")
+                            ui.label(f"Trình độ {assignment.get('staff_skill_level') or 'Chưa cập nhật'}").classes("text-sm font-bold text-blue-600")
+
+                    birth_date = assignment.get("staff_birth_date")
+                    birth_text = "Chưa cập nhật"
+                    if birth_date:
+                        try:
+                            parsed = datetime.fromisoformat(birth_date)
+                            today = datetime.now().date()
+                            age = today.year - parsed.year - ((today.month, today.day) < (parsed.month, parsed.day))
+                            birth_text = f"{parsed.strftime('%d/%m/%Y')} ({age} tuổi)"
+                        except ValueError:
+                            birth_text = birth_date
+
+                    details = [
+                        ("phone", "Số điện thoại", assignment.get("staff_phone") or "Chưa cập nhật", "text-emerald-600"),
+                        ("cake", "Ngày sinh", birth_text, "text-pink-600"),
+                        ("workspace_premium", "Kỹ năng", assignment.get("staff_skill_level") or "Chưa cập nhật", "text-amber-600"),
+                        ("badge", "Trạng thái", "Đang làm nhiệm vụ", "text-blue-600"),
+                    ]
+                    with ui.element("div").classes("grid grid-cols-1 sm:grid-cols-2 gap-3 w-full"):
+                        for icon, label, value, color in details:
+                            with ui.element("div").classes("rounded-2xl bg-slate-50 p-4"):
+                                ui.icon(icon, size="21px").classes(color)
+                                ui.label(label).classes("mt-2 text-xs font-bold uppercase text-slate-400")
+                                ui.label(str(value)).classes("text-sm font-black text-slate-700")
+            dialog.open()
+
         def render_company(req: dict) -> None:
+            if state["staff_dialog_open"]:
+                return
             company_info.clear()
             with company_info:
                 if not req.get("company_name"):
@@ -663,14 +727,42 @@ def create_track_page() -> None:
                     "w-full mt-6 bg-green-600 text-white rounded-2xl font-bold py-4"
                 )
 
+                assignment = req.get("assignment") or {}
+                if assignment.get("staff_id") or assignment.get("rescue_vehicle_id"):
+                    ui.separator().classes("my-5")
+                    ui.label("Đội cứu hộ được phân công").classes("text-base font-black text-slate-900")
+
+                    with ui.element("div").classes(
+                        "w-full mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 cursor-pointer hover:shadow-md transition-shadow"
+                    ).on("click", lambda a=assignment: show_staff_detail(a)):
+                        with ui.row().classes("w-full items-center gap-3"):
+                            ui.avatar(icon="engineering", size="42px").classes("bg-white text-blue-600")
+                            with ui.column().classes("gap-0 min-w-0"):
+                                ui.label(assignment.get("staff_full_name") or assignment.get("staff_name") or "Nhân viên cứu hộ").classes("text-sm font-black text-slate-900")
+                                ui.label(f"{assignment.get('staff_skill_level') or 'Chưa cập nhật'} • Bấm để xem chi tiết").classes("text-xs text-blue-600")
+
+                    with ui.element("div").classes("w-full mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4"):
+                        with ui.row().classes("w-full items-center gap-3"):
+                            ui.icon("local_shipping", size="30px").classes("text-orange-600")
+                            with ui.column().classes("gap-0"):
+                                ui.label(assignment.get("rescue_vehicle_plate") or "Xe cứu hộ").classes("text-sm font-black text-slate-900")
+                                vehicle_text = assignment.get("rescue_vehicle_type") or "Chưa cập nhật loại xe"
+                                if assignment.get("rescue_vehicle_capacity"):
+                                    vehicle_text += f" • {assignment['rescue_vehicle_capacity']}"
+                                ui.label(vehicle_text).classes("text-xs text-slate-500")
+
         # ────────────────────────────────────────────────────────────────
         # ACTIONS
         # ────────────────────────────────────────────────────────────────
 
         def render_actions(req: dict) -> None:
+            # Không xóa cây UI đang chứa dialog thanh toán trong lúc timer/WebSocket
+            # cập nhật trang; nếu không QR/form thẻ sẽ biến mất sau mỗi lần refresh.
+            if state["payment_open"]:
+                return
             actions_area.clear()
             with actions_area:
-                if req["status"] in ("PENDING", "ACCEPTED"):
+                if req["status"] == "PENDING":
                     ui.button(
                         "HỦY YÊU CẦU",
                         icon="cancel",
@@ -693,8 +785,8 @@ def create_track_page() -> None:
                             else:
                                 ui.label("Đang chờ cập nhật chi phí...").classes("italic opacity-70")
 
-                    async def confirm_payment() -> None:
-                        if req.get("has_review"):
+                    async def open_payment_dialog() -> None:
+                        if req.get("has_review") and req.get("payment_status") == "paid":
                             ui.navigate.to(f"/customer/review/{request_id}")
                             return
                         if req.get("payment_status") == "paid":
@@ -704,22 +796,125 @@ def create_track_page() -> None:
                             ui.notify("Chưa có số tiền cần thanh toán", type="warning")
                             return
 
-                        try:
-                            await process_payment(
-                                request_id=request_id,
-                                amount=float(price),
-                                payment_method=req.get("payment_method") or "cash",
-                            )
-                            ui.notify("Thanh toán thành công", type="positive")
-                            await update_ui()
-                            ui.navigate.to(f"/customer/review/{request_id}")
-                        except Exception as e:
-                            ui.notify(f"Lỗi: {str(e)}", type="negative")
+                        state["payment_open"] = True
+                        payment_state = {"method": "cash", "processing": False}
+                        payment_dialog = ui.dialog().props("persistent")
+
+                        def payment_closed() -> None:
+                            state["payment_open"] = False
+
+                        payment_dialog.on("hide", payment_closed)
+                        with payment_dialog, ui.card().classes(
+                            "w-[560px] max-w-[94vw] max-h-[92vh] rounded-3xl p-0 overflow-hidden"
+                        ):
+                            with ui.row().classes("w-full items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5 text-white"):
+                                with ui.column().classes("gap-0"):
+                                    ui.label("Chọn hình thức thanh toán").classes("text-xl font-black")
+                                    ui.label(f"Ca cứu hộ #{request_id} • {float(price):,.0f} đ").classes("text-xs text-blue-100")
+                                ui.button(icon="close", on_click=payment_dialog.close).props("flat round color=white")
+
+                            with ui.column().classes("w-full gap-4 p-6 overflow-y-auto"):
+                                method_select = ui.radio(
+                                    options={
+                                        "cash": "Tiền mặt",
+                                        "qr": "Chuyển khoản QR",
+                                        "card": "Thẻ Visa",
+                                    },
+                                    value="cash",
+                                ).props("inline color=primary").classes("w-full font-bold")
+
+                                method_content = ui.column().classes("w-full")
+                                card_number = None
+                                card_name = None
+                                card_expiry = None
+                                card_cvv = None
+
+                                def render_method() -> None:
+                                    nonlocal card_number, card_name, card_expiry, card_cvv
+                                    payment_state["method"] = method_select.value or "cash"
+                                    method_content.clear()
+                                    with method_content:
+                                        if payment_state["method"] == "cash":
+                                            with ui.element("div").classes("w-full rounded-2xl border border-emerald-200 bg-emerald-50 p-5"):
+                                                ui.icon("payments", size="2.5rem").classes("text-emerald-600")
+                                                ui.label("Thanh toán tiền mặt").classes("mt-2 text-lg font-black text-emerald-800")
+                                                ui.label("Xác nhận sau khi bạn đã giao đủ tiền cho đơn vị cứu hộ.").classes("text-sm text-emerald-700")
+                                        elif payment_state["method"] == "qr":
+                                            with ui.column().classes("w-full items-center rounded-2xl border border-blue-200 bg-blue-50 p-5 gap-2"):
+                                                ui.label("Quét mã để chuyển khoản").classes("text-lg font-black text-blue-900")
+                                                ui.image(_payment_qr_url(request_id, float(price))).classes(
+                                                    "h-56 w-56 rounded-2xl border-4 border-white bg-white shadow-sm"
+                                                )
+                                                ui.label(f"Số tiền: {float(price):,.0f} đ").classes("text-xl font-black text-blue-800")
+                                                ui.label(f"Nội dung: CUUHO {request_id}").classes("text-sm font-bold text-blue-700")
+                                                ui.label("Sau khi chuyển khoản thành công, bấm nút xác nhận bên dưới.").classes("text-xs text-blue-600 text-center")
+                                        else:
+                                            with ui.element("div").classes("w-full rounded-2xl border border-slate-200 bg-slate-50 p-5"):
+                                                with ui.row().classes("w-full items-center justify-between mb-3"):
+                                                    ui.label("Thông tin thẻ Visa").classes("text-lg font-black text-slate-900")
+                                                    ui.icon("credit_card", size="2rem").classes("text-blue-600")
+                                                card_number = ui.input("Số thẻ", placeholder="4111 1111 1111 1111").classes("w-full").props("outlined maxlength=19")
+                                                card_name = ui.input("Tên chủ thẻ", placeholder="NGUYEN VAN A").classes("w-full mt-3").props("outlined maxlength=100")
+                                                with ui.row().classes("w-full gap-3 mt-3"):
+                                                    card_expiry = ui.input("MM/YY", placeholder="12/30").classes("flex-1").props("outlined maxlength=5")
+                                                    card_cvv = ui.input("CVV", placeholder="123").classes("flex-1").props("outlined maxlength=3 type=password")
+
+                                method_select.on_value_change(lambda _: render_method())
+                                render_method()
+
+                                async def complete_payment() -> None:
+                                    if payment_state["processing"]:
+                                        return
+                                    method = payment_state["method"]
+                                    if method == "card":
+                                        number = re.sub(r"\s+", "", card_number.value or "")
+                                        if not re.fullmatch(r"4\d{12}(?:\d{3})?", number):
+                                            ui.notify("Số thẻ Visa không hợp lệ", type="warning")
+                                            return
+                                        if not (card_name.value or "").strip():
+                                            ui.notify("Vui lòng nhập tên chủ thẻ", type="warning")
+                                            return
+                                        if not re.fullmatch(r"(0[1-9]|1[0-2])/\d{2}", card_expiry.value or ""):
+                                            ui.notify("Ngày hết hạn phải theo định dạng MM/YY", type="warning")
+                                            return
+                                        if not re.fullmatch(r"\d{3}", card_cvv.value or ""):
+                                            ui.notify("CVV phải gồm 3 chữ số", type="warning")
+                                            return
+
+                                    payment_state["processing"] = True
+                                    pay_button.props("loading disable")
+                                    transaction_id = None if method == "cash" else f"{method.upper()}-{uuid.uuid4().hex[:16].upper()}"
+                                    try:
+                                        result = await process_payment(
+                                            request_id=request_id,
+                                            amount=float(price),
+                                            payment_method=method,
+                                            transaction_id=transaction_id,
+                                        )
+                                        if result.get("payment_status") != "paid" or result.get("payment_method") != method:
+                                            raise RuntimeError("Thông tin thanh toán trả về không khớp")
+                                        payment_dialog.close()
+                                        ui.notify("Đã ghi nhận thanh toán thành công", type="positive")
+                                        await update_ui()
+                                        ui.navigate.to(f"/customer/review/{request_id}")
+                                    except Exception as e:
+                                        payment_state["processing"] = False
+                                        pay_button.props(remove="loading disable")
+                                        ui.notify(f"Lỗi thanh toán: {str(e)}", type="negative")
+
+                                with ui.row().classes("w-full justify-end gap-3 pt-2"):
+                                    ui.button("Để sau", on_click=payment_dialog.close).props("flat no-caps")
+                                    pay_button = ui.button(
+                                        "Xác nhận thanh toán",
+                                        icon="verified",
+                                        on_click=complete_payment,
+                                    ).classes("rounded-xl bg-blue-600 px-5 text-white font-bold").props("unelevated no-caps")
+                        payment_dialog.open()
 
                     ui.button(
-                        "XEM ĐÁNH GIÁ" if req.get("has_review") else "OK",
+                        "XEM ĐÁNH GIÁ" if req.get("has_review") and req.get("payment_status") == "paid" else "OK",
                         icon="check",
-                        on_click=confirm_payment,
+                        on_click=open_payment_dialog,
                     ).classes(
                         "w-full rounded-2xl font-bold py-4 bg-emerald-600 text-white"
                     ).props("unelevated")

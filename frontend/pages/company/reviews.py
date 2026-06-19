@@ -2,15 +2,32 @@
 Company Reviews - NiceGUI
 """
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from html import escape
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 from nicegui import ui
 from core.auth import require_role
 from components.page_layout import page_layout
 from components.company_ui import empty_state, inject_company_styles, kpi_card, page_header, section_heading, status_badge
 from core.config import BACKEND_URL
-from services.rescue_api import get_company_reviews
+from services.rescue_api import get_company_reviews, get_request_detail
+
+
+VIETNAM_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+
+
+def _format_vietnam_datetime(value, fallback="Chưa cập nhật") -> str:
+    """Convert backend UTC timestamps (including legacy naive values) to UTC+7."""
+    if not value:
+        return fallback
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(VIETNAM_TZ).strftime("%H:%M • %d/%m/%Y")
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def _media_url(path: str | None) -> str:
@@ -61,10 +78,18 @@ def create_reviews_page():
             gap: 10px;
             transition: transform 0.18s ease, box-shadow 0.18s ease;
             min-width: 0;
+            cursor: pointer;
         }
         .review-card:hover {
             transform: translateY(-2px);
             box-shadow: 0 14px 28px rgba(15, 23, 42, 0.11);
+        }
+        .review-card:focus-visible {
+            outline: 3px solid rgba(37, 99, 235, 0.28);
+            outline-offset: 3px;
+        }
+        .review-detail-dialog .q-dialog__inner > div {
+            border-radius: 24px;
         }
         .review-grid {
             display: grid;
@@ -213,7 +238,12 @@ def create_reviews_page():
         def _render_review_card(r):
             rating = int(r.get('rating') or 0)
             customer_name = r.get('customer_name') or 'Khách hàng ẩn danh'
-            with ui.element("div").classes("review-card"):
+            async def open_detail():
+                await _show_rescue_detail(r)
+
+            with ui.element("div").classes("review-card").props(
+                "role=button tabindex=0 aria-label='Xem chi tiết ca cứu hộ'"
+            ).on("click", open_detail).on("keydown.enter", open_detail):
                 # Header: avatar + name + date
                 with ui.row().classes("w-full items-center justify-between gap-2"):
                     with ui.row().classes("items-center gap-2 flex-1 min-w-0"):
@@ -224,7 +254,7 @@ def create_reviews_page():
                                 "text-sm font-black text-slate-900 truncate"
                             )
                             status_badge(r.get('service_name') or 'Dịch vụ cứu hộ', "blue")
-                    ui.label(str(r.get('created_at') or '')[:10]).classes(
+                    ui.label(_format_vietnam_datetime(r.get('created_at'), "--")).classes(
                         "text-xs font-bold text-slate-400 flex-shrink-0"
                     )
 
@@ -239,6 +269,136 @@ def create_reviews_page():
                 ui.label(comment).classes(
                     "text-xs text-slate-600 leading-relaxed line-clamp-3"
                 ).style("display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;")
+
+        async def _show_rescue_detail(review):
+            request_id = review.get("rescue_request_id")
+            if not request_id:
+                ui.notify("Đánh giá này chưa được liên kết với ca cứu hộ", type="warning")
+                return
+
+            dialog = ui.dialog().classes("review-detail-dialog")
+            with dialog, ui.card().classes("w-[min(920px,95vw)] max-h-[90vh] p-0 overflow-hidden"):
+                with ui.row().classes("w-full items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white"):
+                    with ui.column().classes("gap-0"):
+                        ui.label(f"Chi tiết ca cứu hộ #{request_id}").classes("text-xl font-black")
+                        ui.label("Thông tin đầy đủ của ca cứu hộ được khách hàng đánh giá").classes("text-xs text-blue-100")
+                    ui.button(icon="close", on_click=dialog.close).props("flat round color=white aria-label='Đóng'")
+                body = ui.column().classes("w-full gap-4 p-6 overflow-y-auto")
+
+            dialog.open()
+            with body:
+                with ui.row().classes("w-full justify-center py-12"):
+                    ui.spinner("dots", size="3rem", color="primary")
+
+            request = await get_request_detail(int(request_id))
+            body.clear()
+            if not request:
+                with body:
+                    empty_state("error_outline", "Không tải được chi tiết", "Vui lòng thử lại sau.")
+                return
+
+            def text(value, fallback="Chưa cập nhật"):
+                return str(value) if value not in (None, "") else fallback
+
+            def money(value):
+                if value in (None, ""):
+                    return "Chưa cập nhật"
+                try:
+                    return f"{float(value):,.0f} đ".replace(",", ".")
+                except (TypeError, ValueError):
+                    return str(value)
+
+            def date_time(value):
+                return _format_vietnam_datetime(value)
+
+            status_labels = {
+                "PENDING": "Đang chờ", "ACCEPTED": "Đã tiếp nhận", "ASSIGNED": "Đã phân công",
+                "ON_THE_WAY": "Đang đến", "IN_PROGRESS": "Đang cứu hộ", "COMPLETED": "Hoàn thành",
+                "REJECTED": "Đã từ chối", "CANCELLED": "Đã hủy",
+            }
+            payment_labels = {"paid": "Đã thanh toán", "unpaid": "Chưa thanh toán", "refunded": "Đã hoàn tiền"}
+            method_labels = {"cash": "Tiền mặt", "qr": "Chuyển khoản QR", "momo": "MoMo", "vnpay": "VNPay", "card": "Thẻ Visa"}
+
+            def info_item(icon, label, value):
+                with ui.row().classes("items-start gap-3 min-w-0"):
+                    ui.icon(icon, size="20px").classes("text-blue-600 mt-0.5 flex-shrink-0")
+                    with ui.column().classes("gap-0 min-w-0"):
+                        ui.label(label).classes("text-[11px] font-bold uppercase tracking-wide text-slate-400")
+                        ui.label(text(value)).classes("text-sm font-bold text-slate-700 break-words")
+
+            services = request.get("services") or []
+            service_names = ", ".join(s.get("service_name", "") for s in services if s.get("service_name"))
+            assignment = request.get("assignment") or {}
+            vehicle_parts = [
+                request.get("customer_vehicle_brand"), request.get("customer_vehicle_model"),
+                str(request.get("customer_vehicle_year")) if request.get("customer_vehicle_year") else None,
+                request.get("customer_vehicle_fuel_type"),
+            ]
+            vehicle_detail = " • ".join(part for part in vehicle_parts if part)
+
+            with body:
+                with ui.row().classes("w-full items-center justify-between gap-3 flex-wrap"):
+                    with ui.row().classes("items-center gap-3"):
+                        customer_name = review.get("customer_name") or "Khách hàng ẩn danh"
+                        avatar_url = _media_url(review.get("customer_avatar_url") or review.get("avatar_url")) or _fallback_avatar(customer_name)
+                        ui.image(avatar_url).classes("h-12 w-12 rounded-full object-cover border border-slate-100")
+                        with ui.column().classes("gap-0"):
+                            ui.label(request.get("customer_name") or customer_name).classes("text-base font-black text-slate-900")
+                            ui.label(f"{text(request.get('customer_phone'))} • Mã yêu cầu #{request_id}").classes("text-xs text-slate-500")
+                    status_badge(status_labels.get(request.get("status"), text(request.get("status"))), "blue")
+
+                with ui.element("div").classes("w-full rounded-2xl bg-amber-50 border border-amber-100 p-4"):
+                    with ui.row().classes("items-center gap-1"):
+                        rating = int(review.get("rating") or 0)
+                        for i in range(5):
+                            ui.icon("star", size="20px").classes("text-amber-400" if i < rating else "text-slate-200")
+                        ui.label(f"{rating}/5").classes("text-sm font-black text-slate-700 ml-2")
+                        ui.label(f"• {date_time(review.get('created_at'))}").classes("text-xs text-slate-500")
+                    ui.label(review.get("comment") or "Không có nhận xét.").classes("text-sm text-slate-700 mt-2 leading-relaxed")
+
+                with ui.element("div").classes("w-full rounded-2xl border border-slate-200 p-5"):
+                    ui.label("Thông tin sự cố").classes("text-base font-black text-slate-900 mb-4")
+                    with ui.element("div").classes("grid grid-cols-1 sm:grid-cols-2 gap-5"):
+                        info_item("home_repair_service", "Dịch vụ", service_names or request.get("incident_type"))
+                        info_item("directions_car", "Xe khách hàng", request.get("customer_vehicle_plate"))
+                        info_item("minor_crash", "Thông tin xe", vehicle_detail or None)
+                        info_item("warning_amber", "Loại sự cố", request.get("incident_type"))
+                        info_item("schedule", "Thời gian dự kiến", f"{request['eta_minutes']} phút" if request.get("eta_minutes") is not None else None)
+                    ui.separator().classes("my-4")
+                    info_item("description", "Mô tả sự cố", request.get("description"))
+                    with ui.element("div").classes("mt-4"):
+                        info_item("location_on", "Địa điểm cứu hộ", request.get("address_description"))
+                    if request.get("latitude") is not None and request.get("longitude") is not None:
+                        ui.link(
+                            "Mở vị trí trên Google Maps",
+                            f"https://www.google.com/maps?q={request['latitude']},{request['longitude']}",
+                            new_tab=True,
+                        ).classes("text-xs font-bold text-blue-600 mt-2 ml-8")
+
+                    images = request.get("images") or []
+                    if images:
+                        ui.label("Hình ảnh sự cố").classes("text-[11px] font-bold uppercase tracking-wide text-slate-400 mt-5 mb-2")
+                        with ui.element("div").classes("grid grid-cols-2 sm:grid-cols-3 gap-3"):
+                            for image_path in images:
+                                ui.image(_media_url(image_path)).classes("w-full h-32 rounded-xl object-cover border border-slate-200")
+
+                with ui.element("div").classes("w-full rounded-2xl border border-slate-200 p-5"):
+                    ui.label("Thực hiện & thanh toán").classes("text-base font-black text-slate-900 mb-4")
+                    with ui.element("div").classes("grid grid-cols-1 sm:grid-cols-2 gap-5"):
+                        info_item("engineering", "Nhân viên phụ trách", assignment.get("staff_name"))
+                        info_item("local_shipping", "Xe cứu hộ", assignment.get("rescue_vehicle_plate"))
+                        info_item("payments", "Chi phí", money(request.get("agreed_price")))
+                        info_item("receipt_long", "Nội dung hóa đơn", request.get("invoice_description"))
+                        info_item("account_balance_wallet", "Phương thức", method_labels.get(request.get("payment_method"), request.get("payment_method")))
+                        info_item("paid", "Thanh toán", payment_labels.get(request.get("payment_status"), request.get("payment_status")))
+
+                with ui.element("div").classes("w-full rounded-2xl border border-slate-200 p-5"):
+                    ui.label("Mốc thời gian").classes("text-base font-black text-slate-900 mb-4")
+                    with ui.element("div").classes("grid grid-cols-1 sm:grid-cols-2 gap-5"):
+                        info_item("add_circle_outline", "Tạo yêu cầu", date_time(request.get("created_at")))
+                        info_item("assignment_ind", "Phân công", date_time(assignment.get("assigned_time")))
+                        info_item("near_me", "Đến hiện trường", date_time(request.get("actual_arrival_time")))
+                        info_item("task_alt", "Hoàn thành", date_time(request.get("actual_completion_time")))
 
         async def refresh_reviews():
             nonlocal all_reviews

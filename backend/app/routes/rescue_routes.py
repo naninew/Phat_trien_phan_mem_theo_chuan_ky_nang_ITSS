@@ -54,6 +54,7 @@ def _review_meta(req, review) -> dict:
         "review_deadline": deadline.isoformat() if deadline else None,
         "can_review": (
             req.status == "COMPLETED"
+            and req.payment_status == "paid"
             and deadline is not None
             and datetime.utcnow() <= deadline
         ),
@@ -381,6 +382,7 @@ def create_rescue_request(
             "id": req.id,
             "status": req.status,
             "company_id": req.company_id,
+            "estimated_price": req.estimated_price,
             "address_description": req.address_description,
             "created_at": req.created_at.isoformat(),
         },
@@ -433,6 +435,7 @@ def get_my_requests(
                 "incident_type": r.incident_type,
                 "description": r.description,
                 "eta_minutes": r.eta_minutes,
+                "estimated_price": r.estimated_price,
                 "agreed_price": r.agreed_price,
                 "invoice_description": r.invoice_description,
                 "payment_method": r.payment_method,
@@ -502,12 +505,20 @@ def get_request_detail(
     if req.assignment:
         staff = db.query(RescueStaff).filter(RescueStaff.id == req.assignment.staff_id).first()
         r_vehicle = db.query(RescueVehicle).filter(RescueVehicle.id == req.assignment.rescue_vehicle_id).first()
-        staff_name = f"Nhân viên #{staff.id} - {staff.skill_level}" if staff else None
+        staff_name = f"{staff.full_name or f'Nhân viên #{staff.id}'} - {staff.skill_level}" if staff else None
         assignment_data = {
             "staff_id": staff.id if staff else None,
             "staff_name": staff_name,
+            "staff_full_name": staff.full_name if staff else None,
+            "staff_phone": staff.phone if staff else None,
+            "staff_birth_date": staff.birth_date.isoformat() if staff and staff.birth_date else None,
+            "staff_skill_level": staff.skill_level if staff else None,
+            "staff_status": staff.status.value if staff and hasattr(staff.status, "value") else (staff.status if staff else None),
             "rescue_vehicle_id": r_vehicle.id if r_vehicle else None,
             "rescue_vehicle_plate": r_vehicle.plate_number if r_vehicle else None,
+            "rescue_vehicle_type": r_vehicle.vehicle_type if r_vehicle else None,
+            "rescue_vehicle_capacity": r_vehicle.capacity if r_vehicle else None,
+            "rescue_vehicle_status": r_vehicle.status if r_vehicle else None,
             "assigned_time": req.assignment.assigned_time.isoformat() if req.assignment.assigned_time else None
         }
 
@@ -515,6 +526,8 @@ def get_request_detail(
         data={
             "id": req.id,
             "user_id": req.user_id,
+            "customer_name": req.user.full_name if req.user else None,
+            "customer_phone": req.user.phone if req.user else None,
             "status": req.status,
             "services": services_data,
             "company_id": req.company_id,
@@ -525,6 +538,10 @@ def get_request_detail(
             "company_radius_km": company.service_radius_km if company else None,
             "customer_vehicle_id": req.vehicle_id,
             "customer_vehicle_plate": customer_vehicle.license_plate if customer_vehicle else None,
+            "customer_vehicle_brand": customer_vehicle.brand if customer_vehicle else None,
+            "customer_vehicle_model": customer_vehicle.model if customer_vehicle else None,
+            "customer_vehicle_year": customer_vehicle.year if customer_vehicle else None,
+            "customer_vehicle_fuel_type": customer_vehicle.fuel_type if customer_vehicle else None,
             "latitude": req.latitude,
             "longitude": req.longitude,
             "address_description": req.address_description,
@@ -532,6 +549,7 @@ def get_request_detail(
             "description": req.description,
             "images": req.images or [],
             "eta_minutes": req.eta_minutes,
+            "estimated_price": req.estimated_price,
             "agreed_price": req.agreed_price,
             "invoice_description": req.invoice_description,
             "payment_method": req.payment_method,
@@ -557,12 +575,12 @@ def cancel_request(
     db: Session = Depends(get_db),
     current_user: dict = Depends(auth_svc.get_current_user_from_token),
 ):
-    """Hủy yêu cầu (chỉ customer, khi còn pending/accepted)."""
+    """Hủy yêu cầu (chỉ customer, khi còn PENDING)."""
     req = rescue_svc.cancel_request(db, request_id, current_user["user_id"])
     if not req:
         raise HTTPException(
             status_code=400,
-            detail="Không thể hủy yêu cầu – đã được xử lý hoặc không tồn tại",
+            detail="Không thể hủy yêu cầu – công ty đã tiếp nhận hoặc yêu cầu không tồn tại",
         )
     return success_response(data={"id": req.id, "status": req.status}, message="Đã hủy yêu cầu")
 
@@ -635,6 +653,7 @@ def get_company_queue(
             "latitude": r.latitude,
             "longitude": r.longitude,
             "eta_minutes": r.eta_minutes,
+            "estimated_price": r.estimated_price,
             "agreed_price": r.agreed_price,
             "payment_method": r.payment_method,
             "payment_status": r.payment_status,
@@ -852,7 +871,13 @@ def process_payment(
         )
     
     return success_response(
-        data={"id": req.id, "payment_status": req.payment_status},
+        data={
+            "id": req.id,
+            "payment_status": req.payment_status,
+            "payment_method": req.payment_method,
+            "amount": req.agreed_price,
+            "transaction_id": req.payment.transaction_id if req.payment else None,
+        },
         message="Thanh toán thành công",
     )
 
@@ -895,9 +920,19 @@ def add_staff(
     if not company:
         raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
 
-    staff = rescue_svc.create_staff(db, company.id, staff_data)
+    try:
+        staff = rescue_svc.create_staff(db, company.id, staff_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return success_response(
-        data={"id": staff.id, "skill_level": staff.skill_level},
+        data={
+            "id": staff.id,
+            "full_name": staff.full_name,
+            "birth_year": staff.birth_year,
+            "birth_date": staff.birth_date.isoformat() if staff.birth_date else None,
+            "phone": staff.phone,
+            "skill_level": staff.skill_level,
+        },
         message="Đã thêm nhân viên"
     )
 
@@ -1061,6 +1096,10 @@ def list_company_staff(
         data=[
             {
                 "id": s.id,
+                "full_name": s.full_name,
+                "birth_year": s.birth_year,
+                "birth_date": s.birth_date.isoformat() if s.birth_date else None,
+                "phone": s.phone,
                 "skill_level": s.skill_level,
                 "status": s.status.value,
             } for s in staff
@@ -1077,8 +1116,21 @@ def add_company_staff(
     company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
     if not company:
         raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
-    staff = rescue_svc.create_staff(db, company.id, staff_data)
-    return success_response(data={"id": staff.id, "skill_level": staff.skill_level}, message="Đã thêm nhân viên")
+    try:
+        staff = rescue_svc.create_staff(db, company.id, staff_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return success_response(
+        data={
+            "id": staff.id,
+            "full_name": staff.full_name,
+            "birth_year": staff.birth_year,
+            "birth_date": staff.birth_date.isoformat() if staff.birth_date else None,
+            "phone": staff.phone,
+            "skill_level": staff.skill_level,
+        },
+        message="Đã thêm nhân viên",
+    )
 
 @router.put("/staff/{staff_id}")
 def update_company_staff(
@@ -1090,7 +1142,10 @@ def update_company_staff(
     company = rescue_svc.get_company_by_owner_id(db, current_user["user_id"])
     if not company:
         raise HTTPException(status_code=404, detail="Không tìm thấy công ty")
-    staff = rescue_svc.update_staff(db, company.id, staff_id, staff_data)
+    try:
+        staff = rescue_svc.update_staff(db, company.id, staff_id, staff_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not staff:
         raise HTTPException(status_code=404, detail="Không tìm thấy nhân viên")
     return success_response(data={"id": staff.id, "status": staff.status.value}, message="Cập nhật thành công")
@@ -1160,6 +1215,8 @@ def get_company_full_details(
 
     for rev in reviews:
         reviews_data.append({
+            "id": rev.id,
+            "rescue_request_id": rev.rescue_request_id,
             "customer_name": rev.user.full_name,
             "customer_avatar_url": rev.user.avatar_url,
             "rating": rev.rating,

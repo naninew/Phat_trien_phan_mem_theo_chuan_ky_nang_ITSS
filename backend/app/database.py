@@ -76,14 +76,41 @@ def _migrate_sqlite_columns() -> None:
         ("users", "avatar_url", "VARCHAR(500)"),
         ("users", "suspend_reason", "VARCHAR(500)"),
         ("rescue_companies", "suspend_reason", "TEXT"),
+        ("rescue_staff", "full_name", "VARCHAR(100)"),
+        ("rescue_staff", "birth_year", "INTEGER"),
+        ("rescue_staff", "birth_date", "DATE"),
+        ("rescue_staff", "phone", "VARCHAR(20)"),
+        ("rescue_requests", "estimated_price", "FLOAT"),
     ]
     for table, column, col_type in migrations:
         if _has_column(table, column):
             continue
         cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
 
+    cursor.execute("CREATE INDEX IF NOT EXISTS ix_rescue_staff_phone ON rescue_staff (phone)")
+
     conn.commit()
     conn.close()
+
+
+def _migrate_postgres_columns() -> None:
+    """Upgrade an existing PostgreSQL staff table without dropping data."""
+    if not DATABASE_URL.startswith("postgresql"):
+        return
+
+    from sqlalchemy import text
+
+    statements = [
+        "ALTER TABLE rescue_staff ADD COLUMN IF NOT EXISTS full_name VARCHAR(100)",
+        "ALTER TABLE rescue_staff ADD COLUMN IF NOT EXISTS birth_year INTEGER",
+        "ALTER TABLE rescue_staff ADD COLUMN IF NOT EXISTS birth_date DATE",
+        "ALTER TABLE rescue_staff ADD COLUMN IF NOT EXISTS phone VARCHAR(20)",
+        "CREATE INDEX IF NOT EXISTS ix_rescue_staff_phone ON rescue_staff (phone)",
+        "ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS estimated_price DOUBLE PRECISION",
+    ]
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
 
 
 def init_db() -> None:
@@ -95,6 +122,7 @@ def init_db() -> None:
     from app.models import user, company, service, vehicle, staff, request, review, payment, community, communication, report  # noqa: F401
     Base.metadata.create_all(bind=engine)
     _migrate_sqlite_columns()
+    _migrate_postgres_columns()
     print(f"[DB] Connected to: {DATABASE_URL[:50]}...")
     print("[DB] Tables created/verified.")
 

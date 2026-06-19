@@ -257,15 +257,30 @@ async def get_company_staff() -> List[Dict[str, Any]]:
     r = await api_client.get("/rescue/staff")
     return r.get("data", [])
 
-async def add_company_staff(skill_level: str) -> Dict[str, Any]:
-    payload = {"skill_level": skill_level}
+async def add_company_staff(full_name: str, birth_date: str, phone: str, skill_level: str) -> Dict[str, Any]:
+    payload = {
+        "full_name": full_name,
+        "birth_date": birth_date,
+        "phone": phone,
+        "skill_level": skill_level,
+    }
     r = await api_client.post("/rescue/staff", data=payload)
     return r.get("data", {})
 
-async def update_company_staff(staff_id: int, skill_level: Optional[str] = None, status: Optional[str] = None) -> bool:
+async def update_company_staff(
+    staff_id: int,
+    skill_level: Optional[str] = None,
+    status: Optional[str] = None,
+    full_name: Optional[str] = None,
+    birth_date: Optional[str] = None,
+    phone: Optional[str] = None,
+) -> bool:
     payload = {}
     if skill_level: payload["skill_level"] = skill_level
     if status: payload["status"] = status
+    if full_name: payload["full_name"] = full_name
+    if birth_date: payload["birth_date"] = birth_date
+    if phone: payload["phone"] = phone
     r = await api_client.put(f"/rescue/staff/{staff_id}", data=payload)
     return r.get("success", False)
 

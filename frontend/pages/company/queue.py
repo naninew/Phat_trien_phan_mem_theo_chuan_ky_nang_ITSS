@@ -799,7 +799,10 @@ def create_queue_page():
                 ).props("outlined rounded")
 
                 s_opts = {
-                    s['id']: f"NV #{s['id']} (Level {s['skill_level']})"
+                    s['id']: "{} ({})".format(
+                        s.get('full_name') or f"NV #{s['id']}",
+                        s['skill_level'],
+                    )
                     for s in staff if s['status'] == 'AVAILABLE'
                 }
                 if not s_opts:
@@ -845,20 +848,41 @@ def create_queue_page():
                 ui.label("Hoàn thành cứu hộ").classes(
                     "text-2xl font-bold mb-6 font-outfit text-primary"
                 )
+                service_total = sum(float(s.get("price") or 0) for s in (req.get("services") or []))
+                estimated_price = req.get("estimated_price")
+                if estimated_price is None:
+                    estimated_price = service_total or None
+
+                with ui.element("div").classes(
+                    "w-full rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 mb-5"
+                ):
+                    ui.label("Giá dự kiến ban đầu").classes(
+                        "text-xs font-black uppercase tracking-wide text-blue-600"
+                    )
+                    ui.label(
+                        f"{float(estimated_price):,.0f} đ" if estimated_price is not None else "Chưa có giá dự kiến"
+                    ).classes("mt-1 text-2xl font-black text-blue-900")
+                    ui.label("Mức giá hệ thống tính khi khách hàng tạo yêu cầu").classes(
+                        "mt-1 text-xs font-medium text-blue-600"
+                    )
+
                 price = ui.number(
-                    label="Giá thực tế (VNĐ)", value=req.get('agreed_price')
+                    label="Giá thực tế (VNĐ)",
+                    value=req.get('agreed_price') or estimated_price,
+                    min=1,
                 ).classes("w-full mb-4").props("outlined rounded")
                 
                 desc = ui.textarea(
-                    label="Mô tả chi tiết hoá đơn", placeholder="Vd: Vá 2 lốp, thay 1 ruột..."
+                    label="Ghi chú / chi tiết hóa đơn",
+                    placeholder="Ví dụ: Vá 2 lốp, thay 1 ruột, phụ phí di chuyển...",
                 ).classes("w-full mb-8").props("outlined rounded rows=3")
 
                 with ui.row().classes("w-full justify-end gap-3"):
                     ui.button("HỦY", on_click=close_dialog).props("flat")
 
                     async def complete():
-                        if price.value is None or price.value == "":
-                            ui.notify("Vui lòng nhập bổ sung giá tiền dịch vụ", type="negative")
+                        if price.value is None or float(price.value) <= 0:
+                            ui.notify("Giá thực tế phải lớn hơn 0", type="negative")
                             return
                         if not desc.value or not desc.value.strip():
                             ui.notify("Vui lòng nhập mô tả chi tiết hoá đơn", type="negative")

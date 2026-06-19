@@ -4,7 +4,7 @@ Rescue service schemas for requests, services, and related operations.
 # pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
-from datetime import datetime
+from datetime import date, datetime
 
 
 class RescueCompanyCreate(BaseModel):
@@ -95,7 +95,7 @@ class RescueRequestUpdate(BaseModel):
     """Schema for updating a rescue request."""
     status: Optional[str] = None
     eta_minutes: Optional[int] = Field(None, ge=0)
-    agreed_price: Optional[float] = None
+    agreed_price: Optional[float] = Field(None, gt=0)
     invoice_description: Optional[str] = None
     
     @validator('status')
@@ -123,6 +123,7 @@ class RescueRequestResponse(BaseModel):
     eta_minutes: Optional[int]
     actual_arrival_time: Optional[datetime]
     actual_completion_time: Optional[datetime]
+    estimated_price: Optional[float]
     agreed_price: Optional[float]
     invoice_description: Optional[str]
     payment_status: str
@@ -149,8 +150,8 @@ class ServiceAssignmentResponse(BaseModel):
         from_attributes = True
 
 class PaymentCreate(BaseModel):
-    amount: float
-    payment_method: str
+    amount: float = Field(..., gt=0)
+    payment_method: str = Field(..., pattern="^(cash|qr|card|momo|vnpay)$")
     transaction_id: Optional[str] = None
     
     class Config:
@@ -238,19 +239,70 @@ class RescueVehicleResponse(BaseModel):
         from_attributes = True
 
 class RescueStaffCreate(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=100)
+    birth_date: date
+    phone: str = Field(..., min_length=10, max_length=15)
     skill_level: str = Field(..., min_length=1, max_length=50)
 
+    @validator('full_name')
+    def normalize_full_name(cls, v):
+        return " ".join(v.split())
+
+    @validator('phone')
+    def validate_phone(cls, v):
+        normalized = v.replace(" ", "").replace("-", "")
+        if not normalized.isdigit() or not normalized.startswith("0") or len(normalized) != 10:
+            raise ValueError("Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0")
+        return normalized
+
+    @validator('birth_date')
+    def validate_birth_date(cls, v):
+        today = date.today()
+        age = today.year - v.year - ((today.month, today.day) < (v.month, v.day))
+        if v.year < 1940 or age < 18:
+            raise ValueError("Ngày sinh không hợp lệ hoặc nhân viên chưa đủ 18 tuổi")
+        return v
+
 class RescueStaffUpdate(BaseModel):
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    birth_date: Optional[date] = None
+    phone: Optional[str] = Field(None, min_length=10, max_length=15)
     skill_level: Optional[str] = None
     status: Optional[str] = None
+
+    @validator('full_name')
+    def normalize_updated_full_name(cls, v):
+        return " ".join(v.split()) if v is not None else v
+
+    @validator('phone')
+    def validate_updated_phone(cls, v):
+        if v is None:
+            return v
+        normalized = v.replace(" ", "").replace("-", "")
+        if not normalized.isdigit() or not normalized.startswith("0") or len(normalized) != 10:
+            raise ValueError("Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0")
+        return normalized
+
+    @validator('birth_date')
+    def validate_updated_birth_date(cls, v):
+        if v is None:
+            return v
+        today = date.today()
+        age = today.year - v.year - ((today.month, today.day) < (v.month, v.day))
+        if v.year < 1940 or age < 18:
+            raise ValueError("Ngày sinh không hợp lệ hoặc nhân viên chưa đủ 18 tuổi")
+        return v
 
 class RescueStaffResponse(BaseModel):
     id: int
     company_id: int
+    full_name: Optional[str]
+    birth_year: Optional[int]
+    birth_date: Optional[date]
+    phone: Optional[str]
     skill_level: str
     status: str
     created_at: datetime
     
     class Config:
         from_attributes = True
-

@@ -262,6 +262,19 @@ def create_rescue_request(
     user_id: int,
     request_data: RescueRequestCreate,
 ) -> RescueRequest:
+    services = db.query(Service).filter(Service.id.in_(request_data.service_ids)).all()
+    base_price_total = sum(float(service.base_price or 0) for service in services)
+    estimated_price = base_price_total
+    company = get_company_by_id(db, request_data.company_id) if request_data.company_id else None
+    if company and company.latitude is not None and company.longitude is not None:
+        distance_km = haversine(
+            request_data.latitude,
+            request_data.longitude,
+            company.latitude,
+            company.longitude,
+        )
+        estimated_price = estimate_price(base_price_total, distance_km)
+
     req = RescueRequest(
         #service_id=request_data.service_ids[0],
         user_id=user_id,
@@ -274,6 +287,7 @@ def create_rescue_request(
         description=request_data.description,
         images=request_data.images or [],
         status=RequestStatus.PENDING,
+        estimated_price=estimated_price,
         payment_method=request_data.payment_method or "cash",
         #agreed_price = request_data.agreed_price,
     )
@@ -282,7 +296,6 @@ def create_rescue_request(
     print("===== REQUEST =====")
     print(req)
     #Tạo các RequestService
-    services = db.query(Service).filter(Service.id.in_(request_data.service_ids)).all()
     for s in services:
         rs = RequestService(
             request_id=req.id,
@@ -467,11 +480,11 @@ def update_request_status(
 
 
 def cancel_request(db: Session, request_id: int, user_id: int) -> Optional[RescueRequest]:
-    """Hủy request – chỉ cho phép khi status là pending hoặc accepted."""
+    """Hủy request – chỉ cho phép trước khi công ty tiếp nhận."""
     req = get_request_by_id(db, request_id)
     if not req or req.user_id != user_id:
         return None
-    if req.status not in (RequestStatus.PENDING, RequestStatus.ACCEPTED):
+    if req.status != RequestStatus.PENDING:
         return None
 
     req.status = RequestStatus.CANCELLED
@@ -498,6 +511,8 @@ def submit_review(
     """Gửi đánh giá sau khi hoàn thành dịch vụ."""
     req = get_request_by_id(db, request_id)
     if not req or req.user_id != user_id or req.status != RequestStatus.COMPLETED:
+        return None
+    if req.payment_status != "paid":
         return None
     if not req.company_id:
         return None
@@ -565,6 +580,10 @@ def process_payment(
 
     if req.payment_status == "paid":
         return req
+
+    # Giá phải khớp với số tiền công ty đã chốt, không tin giá gửi từ trình duyệt.
+    if req.agreed_price is None or abs(float(payment_data.amount) - float(req.agreed_price)) > 0.01:
+        return None
 
     existing_payment = db.query(Payment).filter(
         Payment.rescue_request_id == request_id
@@ -729,8 +748,18 @@ def get_company_staff(db: Session, company_id: int) -> List[RescueStaff]:
     return db.query(RescueStaff).filter(RescueStaff.company_id == company_id).all()
 
 def create_staff(db: Session, company_id: int, staff_data: RescueStaffCreate) -> RescueStaff:
+    duplicate_phone = db.query(RescueStaff.id).filter(
+        RescueStaff.company_id == company_id,
+        RescueStaff.phone == staff_data.phone,
+    ).first()
+    if duplicate_phone:
+        raise ValueError("Số điện thoại đã thuộc một nhân viên trong công ty")
+
     staff = RescueStaff(
         company_id=company_id,
+        full_name=staff_data.full_name,
+        birth_date=staff_data.birth_date,
+        phone=staff_data.phone,
         skill_level=staff_data.skill_level,
         status=StaffStatus.AVAILABLE
     )
@@ -743,6 +772,17 @@ def update_staff(db: Session, company_id: int, staff_id: int, staff_data: Rescue
     staff = db.query(RescueStaff).filter(RescueStaff.id == staff_id, RescueStaff.company_id == company_id).first()
     if not staff:
         return None
+    if staff_data.phone is not None:
+        duplicate_phone = db.query(RescueStaff.id).filter(
+            RescueStaff.company_id == company_id,
+            RescueStaff.phone == staff_data.phone,
+            RescueStaff.id != staff_id,
+        ).first()
+        if duplicate_phone:
+            raise ValueError("Số điện thoại đã thuộc một nhân viên trong công ty")
+    if staff_data.full_name is not None: staff.full_name = staff_data.full_name
+    if staff_data.birth_date is not None: staff.birth_date = staff_data.birth_date
+    if staff_data.phone is not None: staff.phone = staff_data.phone
     if staff_data.skill_level is not None: staff.skill_level = staff_data.skill_level
     if staff_data.status is not None: staff.status = StaffStatus(staff_data.status)
     db.commit()

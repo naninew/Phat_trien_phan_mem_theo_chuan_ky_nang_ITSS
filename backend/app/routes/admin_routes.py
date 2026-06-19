@@ -810,7 +810,7 @@ def get_company_detail(
             ],
             "staff": [
                 {
-                    "name": f"NV-{s.id}",
+                    "name": s.full_name or f"NV-{s.id}",
                     "role": s.skill_level,
                     "status": s.status.value if hasattr(s.status, "value") else s.status,
                 }

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Boolean, Date, DateTime, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -16,6 +16,12 @@ class RescueStaff(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("rescue_companies.id"), nullable=False)
+    # Nullable để tương thích các bản ghi được tạo trước khi có hồ sơ nhân viên.
+    # API bắt buộc các trường này đối với nhân viên mới.
+    full_name = Column(String(100), nullable=True)
+    birth_year = Column(Integer, nullable=True)
+    birth_date = Column(Date, nullable=True)
+    phone = Column(String(20), nullable=True, index=True)
     skill_level = Column(String(50), nullable=False)  # Sơ cấp/Trung cấp/Cao cấp
     status = Column(SQLEnum(StaffStatus), nullable=False, default=StaffStatus.AVAILABLE)
     

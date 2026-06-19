@@ -48,6 +48,7 @@ class RescueRequest(Base):
     actual_completion_time = Column(DateTime)
     
     # Payment
+    estimated_price = Column(Float)  # Giá dự kiến tại thời điểm khách tạo yêu cầu
     agreed_price = Column(Float)
     invoice_description = Column(Text, nullable=True)
     payment_status = Column(String(20), default="unpaid")  # unpaid, paid, refunded

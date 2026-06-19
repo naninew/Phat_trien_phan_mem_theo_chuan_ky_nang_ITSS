@@ -10,7 +10,8 @@ from services.rescue_api import (
     get_services,
     find_nearby_companies,
     create_rescue_request,
-    get_customer_vehicles
+    get_customer_vehicles,
+    add_customer_vehicle,
 )
 import httpx
 # Hàm xác định vị trí thực
@@ -99,7 +100,13 @@ def create_find_rescue_page():
                     with ui.column().classes('w-full gap-6'):
                         # Header
                         ui.label('Chọn phương tiện đang gặp sự cố').classes('text-2xl font-bold text-primary')
-                        ui.label('Bạn có thể chọn xe từ danh sách phương tiện của mình').classes('text-sm text-gray-600 mb-2')
+                        with ui.row().classes('w-full items-center justify-between gap-3 flex-wrap mb-2'):
+                            ui.label('Bạn có thể chọn xe của mình hoặc tạo nhanh thông tin xe đang mượn').classes('text-sm text-gray-600')
+                            ui.button(
+                                'TẠO XE',
+                                icon='add_circle',
+                                on_click=lambda: open_quick_vehicle_dialog(),
+                            ).classes('bg-blue-600 text-white px-5 rounded-xl font-bold').props('unelevated no-caps')
                         
                         # Vehicles Grid
                         vehicles_grid = ui.row().classes('w-full gap-4 flex-wrap')
@@ -142,6 +149,57 @@ def create_find_rescue_page():
                             update_selected_vehicle_summary()
                             ui.notify(f"✓ Đã chọn xe: {v['license_plate']}", type='positive')
                             stepper.next()
+
+                        def open_quick_vehicle_dialog():
+                            with ui.dialog() as dialog, ui.card().classes('w-[480px] max-w-[94vw] rounded-3xl p-7 shadow-xl'):
+                                with ui.row().classes('items-center gap-3 mb-3'):
+                                    with ui.element('div').classes('h-12 w-12 rounded-2xl bg-blue-50 flex items-center justify-center'):
+                                        ui.icon('directions_car', size='1.8rem').classes('text-blue-600')
+                                    with ui.column().classes('gap-0'):
+                                        ui.label('Tạo thông tin xe').classes('text-2xl font-black text-slate-900')
+                                        ui.label('Dùng cho xe mượn hoặc xe chưa có trong danh sách').classes('text-sm text-slate-500')
+
+                                plate = ui.input('Biển số *').classes('w-full').props('outlined rounded stack-label maxlength=20')
+                                brand = ui.input('Hãng xe *').classes('w-full mt-3').props('outlined rounded stack-label maxlength=50')
+                                model = ui.input('Dòng xe *').classes('w-full mt-3').props('outlined rounded stack-label maxlength=50')
+                                year = ui.number('Năm sản xuất *', value=2024, min=1901, max=2100).classes('w-full mt-3').props('outlined rounded stack-label')
+                                fuel = ui.select(
+                                    ['Xăng', 'Dầu', 'Điện', 'Hybrid'],
+                                    label='Loại nhiên liệu',
+                                    value='Xăng',
+                                ).classes('w-full mt-3').props('outlined rounded stack-label')
+
+                                with ui.row().classes('w-full justify-end gap-3 mt-6'):
+                                    ui.button('Hủy', on_click=dialog.close).props('flat no-caps').classes('font-bold')
+
+                                    async def save_vehicle():
+                                        if not all([(plate.value or '').strip(), (brand.value or '').strip(), (model.value or '').strip(), year.value]):
+                                            ui.notify('Vui lòng điền đầy đủ thông tin xe', type='warning')
+                                            return
+                                        data = {
+                                            'license_plate': plate.value.strip().upper(),
+                                            'brand': brand.value.strip(),
+                                            'model': model.value.strip(),
+                                            'year': int(year.value),
+                                            'fuel_type': fuel.value,
+                                        }
+                                        try:
+                                            created = await add_customer_vehicle(data)
+                                            if created and created.get('id'):
+                                                selected = {**data, 'id': created['id']}
+                                                state['selected_vehicle'] = selected
+                                                dialog.close()
+                                                await load_vehicles()
+                                                update_selected_vehicle_summary()
+                                                ui.notify(f"Đã tạo và chọn xe {data['license_plate']}", type='positive')
+                                                stepper.next()
+                                        except Exception as e:
+                                            ui.notify(f'Lỗi tạo xe: {e}', type='negative')
+
+                                    ui.button('Lưu và chọn xe', icon='save', on_click=save_vehicle).classes(
+                                        'bg-blue-600 text-white px-6 rounded-xl font-bold'
+                                    ).props('unelevated no-caps')
+                            dialog.open()
 
                         ui.timer(0.1, load_vehicles, once=True)
                         

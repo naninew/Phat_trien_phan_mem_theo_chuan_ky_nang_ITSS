@@ -5,7 +5,7 @@ Chạy script này sẽ XÓA TOÀN BỘ dữ liệu cũ và tạo lại schema +
 import os
 import random
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -258,6 +258,9 @@ def seed_data() -> None:
             comp = companies[i % len(companies)]
             rstaff = RescueStaff(
                 company_id=comp.id,
+                full_name=f"Nhân viên cứu hộ {i + 1}",
+                birth_date=date(1988 + (i % 12), (i % 12) + 1, (i % 27) + 1),
+                phone=f"091000{i + 1:04d}",
                 skill_level=STAFF_LEVELS[i % len(STAFF_LEVELS)],
                 status=StaffStatus.AVAILABLE if i % 3 else StaffStatus.BUSY,
             )

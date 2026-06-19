@@ -1,7 +1,8 @@
 """
 Trang gửi đánh giá dịch vụ – dành cho khách hàng.
 """
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from nicegui import ui
 
@@ -18,6 +19,8 @@ RATING_LABELS = {
     5: "Rất hài lòng",
 }
 
+VIETNAM_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+
 
 def create_review_page():
 
@@ -29,6 +32,10 @@ def create_review_page():
         req = await get_request_detail(request_id)
         if not req or req['status'] != 'COMPLETED':
             ui.notify("Yêu cầu chưa hoàn thành hoặc không hợp lệ để đánh giá", type="warning")
+            ui.navigate.to(f"/customer/track/{request_id}")
+            return
+        if req.get("payment_status") != "paid":
+            ui.notify("Vui lòng hoàn tất thanh toán trước khi đánh giá", type="warning")
             ui.navigate.to(f"/customer/track/{request_id}")
             return
 
@@ -49,7 +56,12 @@ def create_review_page():
             if not value:
                 return "--"
             try:
-                return datetime.fromisoformat(value.replace("Z", "+00:00")).strftime("%H:%M • %d/%m/%Y")
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                # Backend hiện lưu datetime.utcnow() dạng không kèm timezone.
+                # Vì vậy timestamp naive phải được hiểu là UTC trước khi đổi sang giờ Việt Nam.
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                return parsed.astimezone(VIETNAM_TZ).strftime("%H:%M • %d/%m/%Y")
             except Exception:
                 return value
 
@@ -240,7 +252,14 @@ def create_review_page():
                             ui.separator().classes("my-4")
                             with ui.row().classes("w-full items-center justify-between"):
                                 ui.label("Thanh toán").classes("text-sm font-semibold text-slate-500")
-                                ui.label(req.get("payment_method")).classes(
+                                payment_labels = {
+                                    "cash": "Tiền mặt",
+                                    "qr": "Chuyển khoản QR",
+                                    "card": "Thẻ Visa",
+                                    "momo": "MoMo",
+                                    "vnpay": "VNPay",
+                                }
+                                ui.label(payment_labels.get(req.get("payment_method"), req.get("payment_method"))).classes(
                                     "rounded-lg bg-slate-50 px-3 py-1 text-sm font-bold text-slate-700"
                                 )
 
